@@ -1,0 +1,19 @@
+name: percona-cluster
+summary: Percona XtraDB Cluster - Active/Active MySQL
+maintainer: James Page <james.page@ubuntu.com>
+description: |
+  Percona XtraDB Cluster provides an active/active MySQL
+  compatible alternative implemented using the Galera
+  synchronous replication extensions.
+categories:
+    - databases
+provides:
+  db:
+    interface: mysql
+  db-admin:
+    interface: mysql-root
+  shared-db:
+    interface: mysql-shared
+peers:
+  cluster:
+    interface: percona-cluster
