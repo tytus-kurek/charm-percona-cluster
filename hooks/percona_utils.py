@@ -73,10 +73,8 @@ def get_cluster_hosts():
     hosts = [get_host_ip()]
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
-            hosts.append(get_host_ip(
-                relation_get('private-address',
-                             unit, relid))
-            )
+            hosts.append(get_host_ip(relation_get('private-address',
+                                     unit, relid)))
     return hosts
 
 SQL_SST_USER_SETUP = """mysql -u root << EOF

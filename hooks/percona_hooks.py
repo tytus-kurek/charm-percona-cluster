@@ -52,7 +52,9 @@ def cluster_changed():
                                    {'cluster_name': 'juju_cluster',
                                     'private_address': get_host_ip(),
                                     'clustered': clustered,
-                                    'cluster_hosts': ",".join(hosts)}))
+                                    'cluster_hosts': ",".join(hosts)}
+                                   )
+                   )
     # This is horrid but stops the bootstrap node
     # restarting itself when new nodes start joining
     if clustered and oldest_peer(peer_units()):
