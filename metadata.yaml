@@ -17,3 +17,7 @@ provides:
 peers:
   cluster:
     interface: percona-cluster
+requires:
+  ha:
+    interface: hacluster
+    scope: container
