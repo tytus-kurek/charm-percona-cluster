@@ -14,7 +14,7 @@ from charmhelpers.core.hookenv import (
 )
 from charmhelpers.fetch import (
     apt_install,
-    filter_installed_packages
+    filter_installed_packages,
 )
 from mysql import get_mysql_root_password
 
@@ -35,7 +35,7 @@ except ImportError:
 PACKAGES = [
     'percona-xtradb-cluster-server-5.5',
     'percona-xtradb-cluster-client-5.5',
-    'python-mysqldb'
+    'unison'
 ]
 
 KEY = "keys/repo.percona.com"
@@ -72,6 +72,7 @@ def render_template(template_name, context, template_dir=TEMPLATES_DIR):
     return template.render(context)
 
 
+# TODO: goto charm-helpers (I use this everywhere)
 def get_host_ip(hostname=None):
     hostname = hostname or unit_get('private-address')
     try:
@@ -94,23 +95,26 @@ def get_cluster_hosts():
                                      unit, relid)))
     return hosts
 
+# TODO: refactor to use mysql helper when it support setting arbitary
+#       permissions
 SQL_SST_USER_SETUP = """mysql --user=root --password={} << EOF
-CREATE USER 'sstuser'@'localhost' IDENTIFIED BY 's3cretPass';
+CREATE USER 'sstuser'@'localhost' IDENTIFIED BY '{}';
 GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'sstuser'@'localhost';
 EOF"""
 
 
-def configure_sstuser():
-    subprocess.check_call(SQL_SST_USER_SETUP.format(get_mysql_root_password()),
+def configure_sstuser(sst_password):
+    subprocess.check_call(SQL_SST_USER_SETUP.format(get_mysql_root_password(),
+                                                    sst_password),
                           shell=True)
 
 
 # TODO: mysql charmhelper
-def configure_mysql_root_password():
+def configure_mysql_root_password(password):
     ''' Configure debconf with root password '''
     dconf = Popen(['debconf-set-selections'], stdin=PIPE)
     package = "percona-server-server"
-    root_pass = get_mysql_root_password()
+    root_pass = get_mysql_root_password(password)
     dconf.stdin.write("%s %s/root_password password %s\n" %
                       (package, package, root_pass))
     dconf.stdin.write("%s %s/root_password_again password %s\n" %

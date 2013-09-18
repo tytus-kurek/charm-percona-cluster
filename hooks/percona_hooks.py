@@ -1,8 +1,12 @@
 #!/usr/bin/python
-# TODO: sync passwd files from seed to peers
+# TODO: Support relevant configuration options
+# TODO: Add db and db-admin hooks for mysql compat
+# TODO: Add README.md including squid-deb-proxy updates for repo.percona.com
+# TODO: Support changes to root and sstuser passwords
 
 import sys
 import os
+import glob
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
     log,
@@ -10,7 +14,8 @@ from charmhelpers.core.hookenv import (
     relation_set,
     relation_ids,
     unit_get,
-    config
+    config,
+    service_name
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -31,6 +36,7 @@ from percona_utils import (
     seeded, mark_seeded,
     configure_mysql_root_password
 )
+from mysql import get_mysql_password
 from charmhelpers.contrib.hahelpers.cluster import (
     peer_units,
     oldest_peer,
@@ -39,6 +45,10 @@ from charmhelpers.contrib.hahelpers.cluster import (
     is_leader
 )
 from mysql import configure_db
+from unison import (
+    ssh_authorized_peers,
+    sync_to_peers
+)
 
 hooks = Hooks()
 
@@ -46,11 +56,11 @@ hooks = Hooks()
 @hooks.hook('install')
 def install():
     setup_percona_repo()
-    configure_mysql_root_password()
-    render_config()  # Render base configuation no cluster
+    configure_mysql_root_password(config('root-password'))
+    render_config()  # Render base configuation (no cluster)
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
-    configure_sstuser()
+    configure_sstuser(config('sst-password'))
 
 
 def render_config(clustered=False, hosts=[]):
@@ -58,18 +68,32 @@ def render_config(clustered=False, hosts=[]):
         os.makedirs(os.path.dirname(MY_CNF))
     with open(MY_CNF, 'w') as conf:
         conf.write(render_template(os.path.basename(MY_CNF),
-                                   {'cluster_name': 'juju_cluster',
-                                    'private_address': get_host_ip(),
-                                    'clustered': clustered,
-                                    'cluster_hosts': ",".join(hosts)}
-                                   )
-                   )
+           {'cluster_name': 'juju_cluster',
+            'private_address': get_host_ip(),
+            'clustered': clustered,
+            'cluster_hosts': ",".join(hosts),
+            'sst_password': get_mysql_password(username='sstuser',
+                                               password=config('sst-password'))
+            })
+       )
+    # TODO: set 0640 and change group to mysql if avaliable
+    os.chmod(MY_CNF, 0644)
+
+
+@hooks.hook('cluster-relation-joined')
+def cluster_relation_joined():
+    ssh_authorized_peers(peer_interface='cluster',
+                         user='juju_ssh', group='root',
+                         ensure_local_user=True)
 
 
 @hooks.hook('cluster-relation-changed')
 @hooks.hook('upgrade-charm')
 @hooks.hook('config-changed')
 def cluster_changed():
+    ssh_authorized_peers(peer_interface='cluster',
+                         user='juju_ssh', group='root',
+                         ensure_local_user=True)
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
     pre_hash = file_hash(MY_CNF)
@@ -83,6 +107,11 @@ def cluster_changed():
         elif not clustered:
             # Restart with new configuration
             service_restart('mysql')
+
+    if eligible_leader(LEADER_RES):
+        files = glob.glob('/var/lib/charm/{}/*.passwd'.format(service_name()))
+        sync_to_peers(peer_interface='cluster',
+                      user='juju_ssh', paths=files)
 
 LEADER_RES = 'res_mysql_vip'
 
@@ -149,6 +178,10 @@ def shared_db_changed():
             relation_set(**return_data)
             relation_set(db_host=db_host)
 
+    files = glob.glob('/var/lib/charm/{}/*.passwd'.format(service_name()))
+    sync_to_peers(peer_interface='cluster',
+                  user='juju_ssh', paths=files)
+
 
 @hooks.hook('ha-relation-joined')
 def ha_relation_joined():
@@ -162,18 +195,12 @@ def ha_relation_joined():
         log('Insufficient VIP information to configure cluster')
         sys.exit(1)
 
-    resources = {
-        'res_mysql_vip': 'ocf:heartbeat:IPaddr2',
-        }
-
+    resources = {'res_mysql_vip': 'ocf:heartbeat:IPaddr2'}
     resource_params = {
         'res_mysql_vip': 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
                          (vip, vip_cidr, vip_iface),
         }
-
-    groups = {
-        'grp_percona_cluster': 'res_mysql_vip',
-        }
+    groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     for rel_id in relation_ids('ha'):
         relation_set(rid=rel_id,

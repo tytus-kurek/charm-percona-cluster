@@ -1,11 +1,18 @@
 ''' Helper for working with a MySQL database '''
 # TODO: Contribute to charm-helpers
-import MySQLdb
 import socket
 import os
+from charmhelpers.core.host import pwgen, write_file, mkdir
+from charmhelpers.core.hookenv import unit_get, service_name
+from charmhelpers.fetch import apt_install, filter_installed_packages
 
-from charmhelpers.core.host import pwgen
-from charmhelpers.core.hookenv import unit_get
+
+try:
+    import MySQLdb
+except ImportError:
+    apt_install(filter_installed_packages(['python-mysqldb']),
+                fatal=True)
+    import MySQLdb
 
 
 class MySQLHelper():
@@ -39,7 +46,6 @@ class MySQLHelper():
                                                               remote_ip))
             grants = [i[0] for i in cursor.fetchall()]
         except MySQLdb.OperationalError:
-            print "No grants found"
             return False
         finally:
             cursor.close()
@@ -69,33 +75,38 @@ class MySQLHelper():
         finally:
             cursor.close()
 
-_root_passwd = '/var/lib/mysql/mysql.passwd'
-_named_passwd = '/var/lib/mysql/mysql-{}.passwd'
+_root_passwd = '/var/lib/charm/{}/mysql.passwd'
+_named_passwd = '/var/lib/charm/{}/mysql-{}.passwd'
 
 
-def get_mysql_password(username=None):
-    ''' Retrieve or generate a mysql password for the provided username '''
+def get_mysql_password(username=None, password=None):
+    ''' Retrieve, generate or store a mysql password for
+        the provided username '''
     if username:
-        _passwd_file = _named_passwd.format(username)
+        _passwd_file = _named_passwd.format(service_name(),
+                                            username)
     else:
-        _passwd_file = _root_passwd
-    password = None
+        _passwd_file = _root_passwd.format(service_name())
+    _password = None
     if os.path.exists(_passwd_file):
         with open(_passwd_file, 'r') as passwd:
-            password = passwd.read().strip()
+            _password = passwd.read().strip()
     else:
-        if not os.path.exists(os.path.dirname(_passwd_file)):
-            os.makedirs(os.path.dirname(_passwd_file))
-        password = pwgen(length=32)
-        with open(_passwd_file, 'w') as passwd:
-            passwd.write(password)
-        os.chmod(_passwd_file, 0600)
-    return password
+        mkdir(os.path.dirname(_passwd_file),
+              owner='root', group='root',
+              perms=0770)
+        # Force permissions - for some reason the chmod in makedirs fails
+        os.chmod(os.path.dirname(_passwd_file), 0770)
+        _password = password or pwgen(length=32)
+        write_file(_passwd_file, _password,
+                   owner='root', group='root',
+                   perms=0660)
+    return _password
 
 
-def get_mysql_root_password():
+def get_mysql_root_password(password=None):
     ''' Retrieve or generate mysql root password for service units '''
-    return get_mysql_password()
+    return get_mysql_password(username=None, password=password)
 
 
 def configure_db(hostname,

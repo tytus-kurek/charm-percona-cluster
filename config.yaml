@@ -42,3 +42,9 @@ options:
         type: int
         default: 5490
         description: Default multicast port number that will be used to communicate between HA Cluster nodes.
+    root-password:
+        type: string
+        description: Root password for MySQL access; must be configured pre-deployment for Active-Active clusters.
+    sst-password:
+        type: string
+        description: Re-sync account password for new cluster nodes; must be configured pre-deployment for Active-Active clusters.
