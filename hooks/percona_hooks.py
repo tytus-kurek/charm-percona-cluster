@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # TODO: Support relevant configuration options
 # TODO: Add db and db-admin hooks for mysql compat
-# TODO: Add README.md including squid-deb-proxy updates for repo.percona.com
 # TODO: Support changes to root and sstuser passwords
 
 import sys
