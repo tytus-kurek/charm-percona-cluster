@@ -11,6 +11,8 @@ from charmhelpers.core.hookenv import (
     relation_ids,
     related_units,
     relation_get,
+    relation_set,
+    local_unit,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -121,3 +123,15 @@ def configure_mysql_root_password(password):
                       (package, package, root_pass))
     dconf.communicate()
     dconf.wait()
+
+
+# TODO: Submit for charmhelper
+def relation_clear(r_id):
+    ''' Clears any relation data already set on relation r_id '''
+    settings = relation_get(rid=r_id,
+                            unit=local_unit())
+    for setting in settings:
+        if setting not in ['public-address', 'private-address']:
+            settings[setting] = None
+    relation_set(relation_id=r_id,
+                 **settings)

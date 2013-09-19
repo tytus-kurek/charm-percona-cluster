@@ -15,7 +15,7 @@ from charmhelpers.core.hookenv import (
     relation_ids,
     unit_get,
     config,
-    service_name
+    service_name,
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -34,7 +34,8 @@ from percona_utils import (
     get_cluster_hosts,
     configure_sstuser,
     seeded, mark_seeded,
-    configure_mysql_root_password
+    configure_mysql_root_password,
+    relation_clear,
 )
 from mysql import get_mysql_password
 from charmhelpers.contrib.hahelpers.cluster import (
@@ -67,15 +68,15 @@ def render_config(clustered=False, hosts=[]):
     if not os.path.exists(os.path.dirname(MY_CNF)):
         os.makedirs(os.path.dirname(MY_CNF))
     with open(MY_CNF, 'w') as conf:
-        conf.write(render_template(os.path.basename(MY_CNF),
-           {'cluster_name': 'juju_cluster',
+        context = {
+            'cluster_name': 'juju_cluster',
             'private_address': get_host_ip(),
             'clustered': clustered,
             'cluster_hosts': ",".join(hosts),
             'sst_password': get_mysql_password(username='sstuser',
                                                password=config('sst-password'))
-            })
-       )
+        }
+        conf.write(render_template(os.path.basename(MY_CNF), context))
     # TODO: set 0640 and change group to mysql if avaliable
     os.chmod(MY_CNF, 0644)
 
@@ -197,7 +198,7 @@ def ha_relation_joined():
 
     resources = {'res_mysql_vip': 'ocf:heartbeat:IPaddr2'}
     resource_params = {
-        'res_mysql_vip': 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
+        'res_mysql_vip': 'params ip="%s" cidr_netmask="%s" nic="%s"' %
                          (vip, vip_cidr, vip_iface),
         }
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
@@ -221,8 +222,10 @@ def ha_relation_changed():
             relation_set(rid=r_id,
                          db_host=config('vip'))
     else:
-        # TODO: Unset any data already set if not leader
-        pass
+        # Clear any settings data for non-leader units
+        log('Cluster configured, not leader, clearing relation data')
+        for r_id in relation_ids('shared-db'):
+            relation_clear(r_id)
 
 
 def main():
