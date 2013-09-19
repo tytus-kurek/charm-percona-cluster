@@ -6,7 +6,7 @@ description: |
   compatible alternative implemented using the Galera
   synchronous replication extensions.
 categories:
-    - databases
+  - databases
 provides:
   db:
     interface: mysql
