@@ -1,6 +1,5 @@
 #!/usr/bin/python
 # TODO: Support relevant configuration options
-# TODO: Add db and db-admin hooks for mysql compat
 # TODO: Support changes to root and sstuser passwords
 
 import sys
@@ -123,6 +122,7 @@ def sync_files():
 LEADER_RES = 'res_mysql_vip'
 
 
+# TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('db-relation-changed')
 @hooks.hook('db-admin-relation-changed')
 def db_changed():
@@ -139,7 +139,7 @@ def db_changed():
 
     admin = relation_type() == 'db-admin-relation-changed'
     database_name, _ = remote_unit().split("/")
-    username = database_name  # TODO: is this OK?  mysql used a random username
+    username = database_name
     password = configure_db(relation_get('private-address'),
                             database_name,
                             username,
@@ -152,6 +152,7 @@ def db_changed():
     sync_files()
 
 
+# TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed():
     if not eligible_leader(LEADER_RES):
