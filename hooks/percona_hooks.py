@@ -137,7 +137,7 @@ def db_changed():
     else:
         db_host = unit_get('private-address')
 
-    admin = relation_type() == 'db-admin-relation-changed'
+    admin = relation_type() == 'db-admin'
     database_name, _ = remote_unit().split("/")
     username = database_name
     password = configure_db(relation_get('private-address'),
