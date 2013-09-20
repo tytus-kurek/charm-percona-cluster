@@ -15,6 +15,8 @@ from charmhelpers.core.hookenv import (
     unit_get,
     config,
     service_name,
+    remote_unit,
+    relation_type
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -109,18 +111,53 @@ def cluster_changed():
             service_restart('mysql')
 
     if eligible_leader(LEADER_RES):
-        files = glob.glob('/var/lib/charm/{}/*.passwd'.format(service_name()))
-        sync_to_peers(peer_interface='cluster',
-                      user='juju_ssh', paths=files)
+        sync_files()
+
+
+def sync_files():
+    ''' Sync shared charm state files to all peers '''
+    files = glob.glob('/var/lib/charm/{}/*'.format(service_name()))
+    sync_to_peers(peer_interface='cluster',
+                  user='juju_ssh', paths=files)
 
 LEADER_RES = 'res_mysql_vip'
+
+
+@hooks.hook('db-relation-changed')
+@hooks.hook('db-admin-relation-changed')
+def db_changed():
+    if not eligible_leader(LEADER_RES):
+        log('Service is peered, clearing db relation'
+            ' as this service unit is not the leader')
+        relation_clear()
+        return
+
+    if is_clustered():
+        db_host = config('vip')
+    else:
+        db_host = unit_get('private-address')
+
+    admin = relation_type() == 'db-admin-relation-changed'
+    database_name, _ = remote_unit().split("/")
+    username = database_name  # TODO: is this OK?  mysql used a random username
+    password = configure_db(relation_get('private-address'),
+                            database_name,
+                            username,
+                            admin=admin)
+    relation_set(database=database_name,
+                 user=username,
+                 password=password,
+                 host=db_host)
+
+    sync_files()
 
 
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed():
     if not eligible_leader(LEADER_RES):
-        log('MySQL service is peered, bailing shared-db relation'
+        log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
+        relation_clear()
         return
 
     settings = relation_get()
@@ -178,9 +215,7 @@ def shared_db_changed():
             relation_set(**return_data)
             relation_set(db_host=db_host)
 
-    files = glob.glob('/var/lib/charm/{}/*.passwd'.format(service_name()))
-    sync_to_peers(peer_interface='cluster',
-                  user='juju_ssh', paths=files)
+    sync_files()
 
 
 @hooks.hook('ha-relation-joined')
@@ -220,10 +255,20 @@ def ha_relation_changed():
         for r_id in relation_ids('shared-db'):
             relation_set(rid=r_id,
                          db_host=config('vip'))
+        for r_id in relation_ids('db'):
+            relation_set(rid=r_id,
+                         host=config('vip'))
+        for r_id in relation_ids('db-admin'):
+            relation_set(rid=r_id,
+                         host=config('vip'))
     else:
         # Clear any settings data for non-leader units
         log('Cluster configured, not leader, clearing relation data')
         for r_id in relation_ids('shared-db'):
+            relation_clear(r_id)
+        for r_id in relation_ids('db'):
+            relation_clear(r_id)
+        for r_id in relation_ids('db-admin'):
             relation_clear(r_id)
 
 

@@ -35,7 +35,8 @@ class MySQLHelper():
     def create_database(self, db_name):
         cursor = self.connection.cursor()
         try:
-            cursor.execute("CREATE DATABASE {}".format(db_name))
+            cursor.execute("CREATE DATABASE {} CHARACTER SET UTF8"
+                           .format(db_name))
         finally:
             cursor.close()
 
@@ -65,6 +66,17 @@ class MySQLHelper():
         finally:
             cursor.close()
 
+    def create_admin_grant(self, db_user,
+                           remote_ip, password):
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute("GRANT ALL PRIVILEGES ON *.* TO '{}'@'{}' "
+                           "IDENTIFIED BY '{}'".format(db_user,
+                                                       remote_ip,
+                                                       password))
+        finally:
+            cursor.close()
+
     def cleanup_grant(self, db_user,
                       remote_ip):
         cursor = self.connection.cursor()
@@ -74,6 +86,15 @@ class MySQLHelper():
                                                   remote_ip))
         finally:
             cursor.close()
+
+    def execute(self, sql):
+        ''' Execute arbitary SQL against the database '''
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(sql)
+        finally:
+            cursor.close()
+
 
 _root_passwd = '/var/lib/charm/{}/mysql.passwd'
 _named_passwd = '/var/lib/charm/{}/mysql-{}.passwd'
@@ -111,7 +132,8 @@ def get_mysql_root_password(password=None):
 
 def configure_db(hostname,
                  database,
-                 username):
+                 username,
+                 admin=False):
     ''' Configure access to database for username from hostname '''
     if hostname != unit_get('private-address'):
         remote_ip = socket.gethostbyname(hostname)
@@ -126,7 +148,11 @@ def configure_db(hostname,
     if not m_helper.grant_exists(database,
                                  username,
                                  remote_ip):
-        m_helper.create_grant(database,
-                              username,
-                              remote_ip, password)
+        if not admin:
+            m_helper.create_grant(database,
+                                  username,
+                                  remote_ip, password)
+        else:
+            m_helper.create_admin_grant(username,
+                                        remote_ip, password)
     return password

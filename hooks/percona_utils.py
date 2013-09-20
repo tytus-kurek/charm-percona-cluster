@@ -126,7 +126,7 @@ def configure_mysql_root_password(password):
 
 
 # TODO: Submit for charmhelper
-def relation_clear(r_id):
+def relation_clear(r_id=None):
     ''' Clears any relation data already set on relation r_id '''
     settings = relation_get(rid=r_id,
                             unit=local_unit())

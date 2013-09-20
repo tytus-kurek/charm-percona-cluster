@@ -83,7 +83,7 @@ def get_keypair(user):
             out.write(p)
     subprocess.check_call(['chown', '-R', user, ssh_dir])
     return open(priv_key, 'r').read().strip(), \
-           open(pub_key, 'r').read().strip()
+        open(pub_key, 'r').read().strip()
 
 
 def write_authorized_keys(user, keys):
@@ -127,7 +127,8 @@ def ensure_user(user, group=None):
         subprocess.check_call(cmd)
 
 
-def ssh_authorized_peers(peer_interface, user, group=None, ensure_local_user=False):
+def ssh_authorized_peers(peer_interface, user, group=None,
+                         ensure_local_user=False):
     """
     Main setup function, should be called from both peer -changed and -joined
     hooks with the same parameters.
