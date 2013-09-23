@@ -1,5 +1,4 @@
 #!/usr/bin/python
-# TODO: Support relevant configuration options
 # TODO: Support changes to root and sstuser passwords
 
 import sys
@@ -19,7 +18,8 @@ from charmhelpers.core.hookenv import (
 )
 from charmhelpers.core.host import (
     service_restart,
-    file_hash
+    file_hash,
+    write_file
 )
 from charmhelpers.fetch import (
     apt_update,
@@ -37,7 +37,7 @@ from percona_utils import (
     configure_mysql_root_password,
     relation_clear,
 )
-from mysql import get_mysql_password
+from mysql import get_mysql_password, parse_config
 from charmhelpers.contrib.hahelpers.cluster import (
     peer_units,
     oldest_peer,
@@ -67,18 +67,18 @@ def install():
 def render_config(clustered=False, hosts=[]):
     if not os.path.exists(os.path.dirname(MY_CNF)):
         os.makedirs(os.path.dirname(MY_CNF))
-    with open(MY_CNF, 'w') as conf:
-        context = {
-            'cluster_name': 'juju_cluster',
-            'private_address': get_host_ip(),
-            'clustered': clustered,
-            'cluster_hosts': ",".join(hosts),
-            'sst_password': get_mysql_password(username='sstuser',
-                                               password=config('sst-password'))
-        }
-        conf.write(render_template(os.path.basename(MY_CNF), context))
-    # TODO: set 0640 and change group to mysql if avaliable
-    os.chmod(MY_CNF, 0644)
+    context = {
+        'cluster_name': 'juju_cluster',
+        'private_address': get_host_ip(),
+        'clustered': clustered,
+        'cluster_hosts': ",".join(hosts),
+        'sst_password': get_mysql_password(username='sstuser',
+                                           password=config('sst-password'))
+    }
+    context.update(parse_config())
+    write_file(path=MY_CNF,
+               content=render_template(os.path.basename(MY_CNF), context),
+               perms=0444)
 
 
 @hooks.hook('cluster-relation-joined')

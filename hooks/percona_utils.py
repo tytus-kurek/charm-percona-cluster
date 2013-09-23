@@ -18,7 +18,7 @@ from charmhelpers.fetch import (
     apt_install,
     filter_installed_packages,
 )
-from mysql import get_mysql_root_password
+from mysql import get_mysql_root_password, MySQLHelper
 
 try:
     import jinja2
@@ -97,18 +97,14 @@ def get_cluster_hosts():
                                      unit, relid)))
     return hosts
 
-# TODO: refactor to use mysql helper when it support setting arbitary
-#       permissions
-SQL_SST_USER_SETUP = """mysql --user=root --password={} << EOF
-CREATE USER 'sstuser'@'localhost' IDENTIFIED BY '{}';
-GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* TO 'sstuser'@'localhost';
-EOF"""
+SQL_SST_USER_SETUP = "GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.*" \
+" TO 'sstuser'@'localhost' IDENTIFIED BY '{}'"
 
 
 def configure_sstuser(sst_password):
-    subprocess.check_call(SQL_SST_USER_SETUP.format(get_mysql_root_password(),
-                                                    sst_password),
-                          shell=True)
+    m_helper = MySQLHelper()
+    m_helper.connect(password=get_mysql_root_password())
+    m_helper.execute(SQL_SST_USER_SETUP.format(sst_password))
 
 
 # TODO: mysql charmhelper
