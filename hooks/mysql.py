@@ -235,7 +235,7 @@ def parse_config():
         # Query Cache Configuration
         mysql_config['query_cache_size'] = config['query-cache-size']
         if (config['query-cache-size'] == -1 and
-            config['query-cache-type'] in ['ON', 'DEMAND']):
+                config['query-cache-type'] in ['ON', 'DEMAND']):
             # Calculate the query cache size automatically
             qcache_bytes = (dataset_bytes * 0.20)
             qcache_bytes = int(qcache_bytes -

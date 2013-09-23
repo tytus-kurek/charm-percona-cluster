@@ -98,7 +98,7 @@ def get_cluster_hosts():
     return hosts
 
 SQL_SST_USER_SETUP = "GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.*" \
-" TO 'sstuser'@'localhost' IDENTIFIED BY '{}'"
+    " TO 'sstuser'@'localhost' IDENTIFIED BY '{}'"
 
 
 def configure_sstuser(sst_password):
