@@ -19,11 +19,13 @@ from charmhelpers.core.hookenv import (
 from charmhelpers.core.host import (
     service_restart,
     file_hash,
-    write_file
+    write_file,
+    lsb_release
 )
 from charmhelpers.fetch import (
     apt_update,
     apt_install,
+    add_source,
 )
 from percona_utils import (
     PACKAGES,
@@ -56,7 +58,11 @@ hooks = Hooks()
 
 @hooks.hook('install')
 def install():
-    setup_percona_repo()
+    if config('source') is None and \
+            lsb_release()['DISTRIB_CODENAME'] < 'trusty':
+        setup_percona_repo()
+    elif config('source') is not None:
+        add_source(config('source'))
     configure_mysql_root_password(config('root-password'))
     render_config()  # Render base configuation (no cluster)
     apt_update(fatal=True)
@@ -78,7 +84,7 @@ def render_config(clustered=False, hosts=[]):
     context.update(parse_config())
     write_file(path=MY_CNF,
                content=render_template(os.path.basename(MY_CNF), context),
-               perms=0444)
+               perms=0o444)
 
 
 @hooks.hook('cluster-relation-joined')
@@ -235,7 +241,7 @@ def ha_relation_joined():
     resource_params = {
         'res_mysql_vip': 'params ip="%s" cidr_netmask="%s" nic="%s"' %
                          (vip, vip_cidr, vip_iface),
-        }
+    }
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     for rel_id in relation_ids('ha'):

@@ -111,12 +111,15 @@ def configure_sstuser(sst_password):
 def configure_mysql_root_password(password):
     ''' Configure debconf with root password '''
     dconf = Popen(['debconf-set-selections'], stdin=PIPE)
-    package = "percona-server-server"
+    # Set both percona and mysql password options to cover
+    # both upstream and distro packages.
+    packages = ["percona-server-server", "mysql-server"]
     root_pass = get_mysql_root_password(password)
-    dconf.stdin.write("%s %s/root_password password %s\n" %
-                      (package, package, root_pass))
-    dconf.stdin.write("%s %s/root_password_again password %s\n" %
-                      (package, package, root_pass))
+    for package in packages:
+        dconf.stdin.write("%s %s/root_password password %s\n" %
+                          (package, package, root_pass))
+        dconf.stdin.write("%s %s/root_password_again password %s\n" %
+                          (package, package, root_pass))
     dconf.communicate()
     dconf.wait()
 

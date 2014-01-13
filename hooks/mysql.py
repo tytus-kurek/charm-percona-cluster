@@ -21,6 +21,7 @@ except ImportError:
 
 
 class MySQLHelper():
+
     def __init__(self, host='localhost'):
         self.host = host
 
@@ -120,13 +121,13 @@ def get_mysql_password(username=None, password=None):
     else:
         mkdir(os.path.dirname(_passwd_file),
               owner='root', group='root',
-              perms=0770)
+              perms=0o770)
         # Force permissions - for some reason the chmod in makedirs fails
-        os.chmod(os.path.dirname(_passwd_file), 0770)
+        os.chmod(os.path.dirname(_passwd_file), 0o770)
         _password = password or pwgen(length=32)
         write_file(_passwd_file, _password,
                    owner='root', group='root',
-                   perms=0660)
+                   perms=0o660)
     return _password
 
 

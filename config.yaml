@@ -1,4 +1,7 @@
 options:
+    source:
+        type: string
+        description: Package install location for Percona XtraDB Cluster (defaults to distro for >= 14.04)
     dataset-size:
         default: '80%'
         type: string
