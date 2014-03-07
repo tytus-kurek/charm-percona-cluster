@@ -84,11 +84,9 @@ def render_config(clustered=False, hosts=[]):
                perms=0o444)
 
 
-@hooks.hook('cluster-relation-changed')
 @hooks.hook('upgrade-charm')
 @hooks.hook('config-changed')
-def cluster_changed():
-    peer_echo()
+def config_changed():
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
     pre_hash = file_hash(MY_CNF)
@@ -103,6 +101,11 @@ def cluster_changed():
             # Restart with new configuration
             service_restart('mysql')
 
+
+@hooks.hook('cluster-relation-changed')
+def cluster_changed():
+    peer_echo()
+    config_changed()
 
 LEADER_RES = 'res_mysql_vip'
 
