@@ -5,6 +5,7 @@ import re
 import sys
 import platform
 import os
+import glob
 from string import upper
 from charmhelpers.core.host import pwgen, mkdir, write_file
 from charmhelpers.core.hookenv import unit_get, service_name
@@ -151,6 +152,15 @@ def get_mysql_password(username=None, password=None):
         # cluster relation is not yet started; use on-disk
         _password = get_mysql_password_on_disk(username, password)
     return _password
+
+
+def migrate_passwords_to_peer_relation():
+    ''' Migrate any passwords storage on disk to cluster peer relation '''
+    for f in glob.glob('/var/lib/charm/{}/*.passwd'.format(service_name())):
+        _key = os.path.basename(f)
+        with open(f, 'r') as passwd:
+            _value = passwd.read().strip()
+        peer_store(_key, _value)
 
 
 def get_mysql_root_password(password=None):

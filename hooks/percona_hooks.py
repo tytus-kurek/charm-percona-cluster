@@ -40,7 +40,11 @@ from percona_utils import (
     configure_mysql_root_password,
     relation_clear,
 )
-from mysql import get_mysql_password, parse_config
+from mysql import (
+    get_mysql_password,
+    parse_config,
+    migrate_passwords_to_peer_relation
+)
 from charmhelpers.contrib.hahelpers.cluster import (
     peer_units,
     oldest_peer,
@@ -106,6 +110,12 @@ def config_changed():
 def cluster_changed():
     peer_echo()
     config_changed()
+
+
+@hooks.hook('cluster-relation-joined')
+def cluster_joined():
+    migrate_passwords_to_peer_relation()
+
 
 LEADER_RES = 'res_mysql_vip'
 
