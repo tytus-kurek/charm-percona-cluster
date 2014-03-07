@@ -43,7 +43,6 @@ from percona_utils import (
 from mysql import (
     get_mysql_password,
     parse_config,
-    migrate_passwords_to_peer_relation
 )
 from charmhelpers.contrib.hahelpers.cluster import (
     peer_units,
