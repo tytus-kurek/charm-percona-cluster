@@ -112,11 +112,6 @@ def cluster_changed():
     config_changed()
 
 
-@hooks.hook('cluster-relation-joined')
-def cluster_joined():
-    migrate_passwords_to_peer_relation()
-
-
 LEADER_RES = 'res_mysql_vip'
 
 

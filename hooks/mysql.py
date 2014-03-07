@@ -138,6 +138,7 @@ def get_mysql_password_on_disk(username=None, password=None):
 def get_mysql_password(username=None, password=None):
     ''' Retrieve, generate or store a mysql password for
         the provided username using peer relation cluster '''
+    migrate_passwords_to_peer_relation()
     if username:
         _key = '{}.passwd'.format(username)
     else:
@@ -160,7 +161,12 @@ def migrate_passwords_to_peer_relation():
         _key = os.path.basename(f)
         with open(f, 'r') as passwd:
             _value = passwd.read().strip()
-        peer_store(_key, _value)
+        try:
+            peer_store(_key, _value)
+            os.unlink(f)
+        except ValueError:
+            # NOTE cluster relation not yet ready - skip for now
+            pass
 
 
 def get_mysql_root_password(password=None):
