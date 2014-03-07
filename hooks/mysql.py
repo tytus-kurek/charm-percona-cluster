@@ -142,7 +142,7 @@ def get_mysql_password(username=None, password=None):
     if username:
         _key = '{}.passwd'.format(username)
     else:
-        _key = 'mysql-{}.passwd'.format(service_name())
+        _key = 'mysql.passwd'
 
     try:
         _password = peer_retrieve(_key)
