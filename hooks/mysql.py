@@ -4,8 +4,9 @@ import socket
 import re
 import sys
 import platform
+import os
 from string import upper
-from charmhelpers.core.host import pwgen
+from charmhelpers.core.host import pwgen, mkdir, write_file
 from charmhelpers.core.hookenv import unit_get, service_name
 from charmhelpers.core.hookenv import config as config_get
 from charmhelpers.fetch import apt_install, filter_installed_packages
@@ -108,18 +109,47 @@ _root_passwd = '/var/lib/charm/{}/mysql.passwd'
 _named_passwd = '/var/lib/charm/{}/mysql-{}.passwd'
 
 
+def get_mysql_password_on_disk(username=None, password=None):
+    ''' Retrieve, generate or store a mysql password for
+        the provided username on disk'''
+    if username:
+        _passwd_file = _named_passwd.format(service_name(),
+                                            username)
+    else:
+        _passwd_file = _root_passwd.format(service_name())
+    _password = None
+    if os.path.exists(_passwd_file):
+        with open(_passwd_file, 'r') as passwd:
+            _password = passwd.read().strip()
+    else:
+        mkdir(os.path.dirname(_passwd_file),
+              owner='root', group='root',
+              perms=0o770)
+        # Force permissions - for some reason the chmod in makedirs fails
+        os.chmod(os.path.dirname(_passwd_file), 0o770)
+        _password = password or pwgen(length=32)
+        write_file(_passwd_file, _password,
+                   owner='root', group='root',
+                   perms=0o660)
+    return _password
+
+
 def get_mysql_password(username=None, password=None):
     ''' Retrieve, generate or store a mysql password for
-        the provided username '''
+        the provided username using peer relation cluster '''
     if username:
         _key = '{}.passwd'.format(username)
     else:
         _key = 'mysql-{}.passwd'.format(service_name())
 
-    _password = peer_retrieve(_key)
-    if _password is None:
-        _password = password or pwgen(length=32)
-        peer_store(_key, password)
+    try:
+        _password = peer_retrieve(_key)
+        if _password is None:
+            _password = password or pwgen(length=32)
+            peer_store(_key, password)
+    except ValueError:
+        # cluster relation is not yet started; use on-disk
+        _password = get_mysql_password_on_disk(username, password)
     return _password
 
 
