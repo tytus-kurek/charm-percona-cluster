@@ -97,12 +97,14 @@ def https():
         return True
     for r_id in relation_ids('identity-service'):
         for unit in relation_list(r_id):
-            if None not in [
+            rel_state = [
                 relation_get('https_keystone', rid=r_id, unit=unit),
                 relation_get('ssl_cert', rid=r_id, unit=unit),
                 relation_get('ssl_key', rid=r_id, unit=unit),
                 relation_get('ca_cert', rid=r_id, unit=unit),
-            ]:
+            ]
+            # NOTE: works around (LP: #1203241)
+            if (None not in rel_state) and ('' not in rel_state):
                 return True
     return False
 
@@ -124,17 +126,17 @@ def determine_api_port(public_port):
     return public_port - (i * 10)
 
 
-def determine_haproxy_port(public_port):
+def determine_apache_port(public_port):
     '''
-    Description: Determine correct proxy listening port based on public IP +
-    existence of HTTPS reverse proxy.
+    Description: Determine correct apache listening port based on public IP +
+    state of the cluster.
 
     public_port: int: standard public port for given service
 
     returns: int: the correct listening port for the HAProxy service
     '''
     i = 0
-    if https():
+    if len(peer_units()) > 0 or is_clustered():
         i += 1
     return public_port - (i * 10)
 
