@@ -37,7 +37,6 @@ except ImportError:
 PACKAGES = [
     'percona-xtradb-cluster-server-5.5',
     'percona-xtradb-cluster-client-5.5',
-    'unison'
 ]
 
 KEY = "keys/repo.percona.com"

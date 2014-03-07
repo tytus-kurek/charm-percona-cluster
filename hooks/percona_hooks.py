@@ -3,7 +3,6 @@
 
 import sys
 import os
-import glob
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
     log,
@@ -12,7 +11,6 @@ from charmhelpers.core.hookenv import (
     relation_ids,
     unit_get,
     config,
-    service_name,
     remote_unit,
     relation_type
 )
@@ -26,6 +24,9 @@ from charmhelpers.fetch import (
     apt_update,
     apt_install,
     add_source,
+)
+from charmhelpers.contrib.peerstorage import (
+    peer_echo
 )
 from percona_utils import (
     PACKAGES,
@@ -48,10 +49,6 @@ from charmhelpers.contrib.hahelpers.cluster import (
     is_leader
 )
 from mysql import configure_db
-from unison import (
-    ssh_authorized_peers,
-    sync_to_peers
-)
 
 hooks = Hooks()
 
@@ -87,20 +84,11 @@ def render_config(clustered=False, hosts=[]):
                perms=0o444)
 
 
-@hooks.hook('cluster-relation-joined')
-def cluster_relation_joined():
-    ssh_authorized_peers(peer_interface='cluster',
-                         user='juju_ssh', group='root',
-                         ensure_local_user=True)
-
-
 @hooks.hook('cluster-relation-changed')
 @hooks.hook('upgrade-charm')
 @hooks.hook('config-changed')
 def cluster_changed():
-    ssh_authorized_peers(peer_interface='cluster',
-                         user='juju_ssh', group='root',
-                         ensure_local_user=True)
+    peer_echo()
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
     pre_hash = file_hash(MY_CNF)
@@ -115,15 +103,6 @@ def cluster_changed():
             # Restart with new configuration
             service_restart('mysql')
 
-    if eligible_leader(LEADER_RES):
-        sync_files()
-
-
-def sync_files():
-    ''' Sync shared charm state files to all peers '''
-    files = glob.glob('/var/lib/charm/{}/*'.format(service_name()))
-    sync_to_peers(peer_interface='cluster',
-                  user='juju_ssh', paths=files)
 
 LEADER_RES = 'res_mysql_vip'
 
@@ -154,8 +133,6 @@ def db_changed():
                  user=username,
                  password=password,
                  host=db_host)
-
-    sync_files()
 
 
 # TODO: This could be a hook common between mysql and percona-cluster
@@ -221,8 +198,6 @@ def shared_db_changed():
         if len(return_data) > 0:
             relation_set(**return_data)
             relation_set(db_host=db_host)
-
-    sync_files()
 
 
 @hooks.hook('ha-relation-joined')

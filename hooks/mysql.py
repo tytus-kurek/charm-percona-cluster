@@ -1,17 +1,19 @@
 ''' Helper for working with a MySQL database '''
 # TODO: Contribute to charm-helpers
 import socket
-import os
 import re
 import sys
 import platform
 from string import upper
-from charmhelpers.core.host import pwgen, write_file, mkdir
+from charmhelpers.core.host import pwgen
 from charmhelpers.core.hookenv import unit_get, service_name
 from charmhelpers.core.hookenv import config as config_get
 from charmhelpers.fetch import apt_install, filter_installed_packages
 
-
+from charmhelpers.contrib.peerstorage import (
+    peer_store,
+    peer_retrieve,
+)
 try:
     import MySQLdb
 except ImportError:
@@ -110,24 +112,14 @@ def get_mysql_password(username=None, password=None):
     ''' Retrieve, generate or store a mysql password for
         the provided username '''
     if username:
-        _passwd_file = _named_passwd.format(service_name(),
-                                            username)
+        _key = '{}.passwd'.format(username)
     else:
-        _passwd_file = _root_passwd.format(service_name())
-    _password = None
-    if os.path.exists(_passwd_file):
-        with open(_passwd_file, 'r') as passwd:
-            _password = passwd.read().strip()
-    else:
-        mkdir(os.path.dirname(_passwd_file),
-              owner='root', group='root',
-              perms=0o770)
-        # Force permissions - for some reason the chmod in makedirs fails
-        os.chmod(os.path.dirname(_passwd_file), 0o770)
+        _key = 'mysql-{}.passwd'.format(service_name())
+
+    _password = peer_retrieve(_key)
+    if _password is None:
         _password = password or pwgen(length=32)
-        write_file(_passwd_file, _password,
-                   owner='root', group='root',
-                   perms=0o660)
+        peer_store(_key, password)
     return _password
 
 
