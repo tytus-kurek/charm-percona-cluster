@@ -148,7 +148,7 @@ def get_mysql_password(username=None, password=None):
         _password = peer_retrieve(_key)
         if _password is None:
             _password = password or pwgen(length=32)
-            peer_store(_key, password)
+            peer_store(_key, _password)
     except ValueError:
         # cluster relation is not yet started; use on-disk
         _password = get_mysql_password_on_disk(username, password)
