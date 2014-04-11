@@ -121,7 +121,7 @@ def db_changed(relation_id=None, admin=None):
     if not eligible_leader(LEADER_RES):
         log('Service is peered, clearing db relation'
             ' as this service unit is not the leader')
-        relation_clear()
+        relation_clear(relation_id)
         return
 
     if is_clustered():
@@ -150,7 +150,7 @@ def shared_db_changed(relation_id=None):
     if not eligible_leader(LEADER_RES):
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
-        relation_clear()
+        relation_clear(relation_id)
         return
 
     settings = relation_get()
