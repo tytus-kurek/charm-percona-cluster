@@ -117,7 +117,7 @@ LEADER_RES = 'res_mysql_vip'
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('db-relation-changed')
 @hooks.hook('db-admin-relation-changed')
-def db_changed():
+def db_changed(relation_id=None, admin=None):
     if not eligible_leader(LEADER_RES):
         log('Service is peered, clearing db relation'
             ' as this service unit is not the leader')
@@ -129,14 +129,16 @@ def db_changed():
     else:
         db_host = unit_get('private-address')
 
-    admin = relation_type() == 'db-admin'
+    if admin not in [True, False]:
+        admin = relation_type() == 'db-admin'
     database_name, _ = remote_unit().split("/")
     username = database_name
     password = configure_db(relation_get('private-address'),
                             database_name,
                             username,
                             admin=admin)
-    relation_set(database=database_name,
+    relation_set(relation_id=relation_id,
+                 database=database_name,
                  user=username,
                  password=password,
                  host=db_host)
@@ -144,7 +146,7 @@ def db_changed():
 
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
-def shared_db_changed():
+def shared_db_changed(relation_id=None):
     if not eligible_leader(LEADER_RES):
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
@@ -167,7 +169,8 @@ def shared_db_changed():
         password = configure_db(settings['hostname'],
                                 settings['database'],
                                 settings['username'])
-        relation_set(db_host=db_host,
+        relation_set(relation_id=relation_id,
+                     db_host=db_host,
                      password=password)
     else:
         # Process multiple database setup requests.
@@ -203,8 +206,10 @@ def shared_db_changed():
                                  databases[db]['database'],
                                  databases[db]['username'])
         if len(return_data) > 0:
-            relation_set(**return_data)
-            relation_set(db_host=db_host)
+            relation_set(relation_id=relation_id,
+                         **return_data)
+            relation_set(relation_id=relation_id,
+                         db_host=db_host)
 
 
 @hooks.hook('ha-relation-joined')
@@ -227,7 +232,7 @@ def ha_relation_joined():
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     for rel_id in relation_ids('ha'):
-        relation_set(rid=rel_id,
+        relation_set(relation_id=rel_id,
                      corosync_bindiface=corosync_bindiface,
                      corosync_mcastport=corosync_mcastport,
                      resources=resources,
@@ -242,14 +247,11 @@ def ha_relation_changed():
         log('Cluster configured, notifying other services')
         # Tell all related services to start using the VIP
         for r_id in relation_ids('shared-db'):
-            relation_set(rid=r_id,
-                         db_host=config('vip'))
+            shared_db_changed(r_id)
         for r_id in relation_ids('db'):
-            relation_set(rid=r_id,
-                         host=config('vip'))
+            db_changed(r_id, admin=False)
         for r_id in relation_ids('db-admin'):
-            relation_set(rid=r_id,
-                         host=config('vip'))
+            db_changed(r_id, admin=True)
     else:
         # Clear any settings data for non-leader units
         log('Cluster configured, not leader, clearing relation data')
