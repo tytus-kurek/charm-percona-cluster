@@ -153,7 +153,7 @@ def shared_db_changed(relation_id=None):
         relation_clear(relation_id)
         return
 
-    settings = relation_get()
+    settings = relation_get(rid=relation_id)
     if is_clustered():
         db_host = config('vip')
     else:
