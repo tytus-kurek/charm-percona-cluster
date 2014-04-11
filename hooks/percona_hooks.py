@@ -9,6 +9,7 @@ from charmhelpers.core.hookenv import (
     relation_get,
     relation_set,
     relation_ids,
+    related_units,
     unit_get,
     config,
     remote_unit,
@@ -117,7 +118,7 @@ LEADER_RES = 'res_mysql_vip'
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('db-relation-changed')
 @hooks.hook('db-admin-relation-changed')
-def db_changed(relation_id=None, admin=None):
+def db_changed(relation_id=None, unit=None, admin=None):
     if not eligible_leader(LEADER_RES):
         log('Service is peered, clearing db relation'
             ' as this service unit is not the leader')
@@ -133,7 +134,9 @@ def db_changed(relation_id=None, admin=None):
         admin = relation_type() == 'db-admin'
     database_name, _ = remote_unit().split("/")
     username = database_name
-    password = configure_db(relation_get('private-address'),
+    password = configure_db(relation_get('private-address',
+                                         unit=unit,
+                                         rid=relation_id),
                             database_name,
                             username,
                             admin=admin)
@@ -146,14 +149,15 @@ def db_changed(relation_id=None, admin=None):
 
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
-def shared_db_changed(relation_id=None):
+def shared_db_changed(relation_id=None, unit=None):
     if not eligible_leader(LEADER_RES):
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
         relation_clear(relation_id)
         return
 
-    settings = relation_get(rid=relation_id)
+    settings = relation_get(unit=unit,
+                            rid=relation_id)
     if is_clustered():
         db_host = config('vip')
     else:
@@ -247,11 +251,14 @@ def ha_relation_changed():
         log('Cluster configured, notifying other services')
         # Tell all related services to start using the VIP
         for r_id in relation_ids('shared-db'):
-            shared_db_changed(r_id)
+            for unit in related_units(r_id):
+                shared_db_changed(r_id, unit)
         for r_id in relation_ids('db'):
-            db_changed(r_id, admin=False)
+            for unit in related_units(r_id):
+                db_changed(r_id, unit, admin=False)
         for r_id in relation_ids('db-admin'):
-            db_changed(r_id, admin=True)
+            for unit in related_units(r_id):
+                db_changed(r_id, unit, admin=True)
     else:
         # Clear any settings data for non-leader units
         log('Cluster configured, not leader, clearing relation data')
