@@ -53,12 +53,14 @@ from charmhelpers.contrib.hahelpers.cluster import (
     is_leader
 )
 from mysql import configure_db
+from charmhelpers.payload.execd import execd_preinstall
 
 hooks = Hooks()
 
 
 @hooks.hook('install')
 def install():
+    execd_preinstall()
     if config('source') is None and \
             lsb_release()['DISTRIB_CODENAME'] < 'trusty':
         setup_percona_repo()
