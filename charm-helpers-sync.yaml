@@ -5,3 +5,4 @@ include:
     - fetch
     - contrib.hahelpers.cluster
     - contrib.peerstorage
+    - payload.execd
