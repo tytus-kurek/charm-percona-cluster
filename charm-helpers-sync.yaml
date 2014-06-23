@@ -1,4 +1,4 @@
-branch: lp:~openstack-charmers/charm-helpers/active-active
+branch: lp:charm-helpers
 destination: hooks/charmhelpers
 include:
     - core
