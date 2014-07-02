@@ -110,6 +110,10 @@ def config_changed():
         elif not clustered:
             # Restart with new configuration
             service_restart('mysql')
+    # Notify any changes to the access network
+    for r_id in relation_ids('shared-db'):
+        for unit in related_units(r_id):
+            shared_db_changed(r_id, unit)            
 
 
 @hooks.hook('cluster-relation-changed')
