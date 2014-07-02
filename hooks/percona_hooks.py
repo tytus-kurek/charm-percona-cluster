@@ -236,6 +236,8 @@ def shared_db_changed(relation_id=None, unit=None):
                          **return_data)
             relation_set(relation_id=relation_id,
                          db_host=db_host)
+    relation_set(relation_id=relation_id,
+                 relation_settings={'access-network': access_network})
 
 
 @hooks.hook('ha-relation-joined')
