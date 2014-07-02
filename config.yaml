@@ -35,3 +35,12 @@ options:
         type: int
         default: 5490
         description: Default multicast port number that will be used to communicate between HA Cluster nodes.
+    # Network configuration options
+    # by default all access is over 'private-address'
+    access-network:
+        type: string
+        description: |
+          The IP address and netmask of the 'access' network (e.g., 192.168.0.0/24)
+          .
+          This network will be used for access to database services.
+
