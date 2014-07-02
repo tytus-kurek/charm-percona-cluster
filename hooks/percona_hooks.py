@@ -54,6 +54,10 @@ from charmhelpers.contrib.hahelpers.cluster import (
 )
 from mysql import configure_db
 from charmhelpers.payload.execd import execd_preinstall
+from charmhelpers.contrib.network.ip import (
+    is_address_in_network,
+    get_address_in_network,
+)
 
 hooks = Hooks()
 
@@ -142,11 +146,15 @@ def db_changed(relation_id=None, unit=None, admin=None):
                             database_name,
                             username,
                             admin=admin)
+
     relation_set(relation_id=relation_id,
-                 database=database_name,
-                 user=username,
-                 password=password,
-                 host=db_host)
+                 relation_settings={
+                     'user': username,
+                     'password': password,
+                     'host': db_host,
+                     'database': database_name,
+                 }
+                 )
 
 
 # TODO: This could be a hook common between mysql and percona-cluster
@@ -164,6 +172,9 @@ def shared_db_changed(relation_id=None, unit=None):
         db_host = config('vip')
     else:
         db_host = unit_get('private-address')
+
+    access_network = config('access-network')
+
     singleset = set([
         'database',
         'username',
@@ -175,6 +186,10 @@ def shared_db_changed(relation_id=None, unit=None):
         password = configure_db(settings['hostname'],
                                 settings['database'],
                                 settings['username'])
+        if (access_network is not None and
+                is_address_in_network(access_network,
+                                      get_host_ip(settings['hostname']))):
+            db_host = get_address_in_network(access_network)
         relation_set(relation_id=relation_id,
                      db_host=db_host,
                      password=password)
@@ -211,6 +226,11 @@ def shared_db_changed(relation_id=None, unit=None):
                     configure_db(databases[db]['hostname'],
                                  databases[db]['database'],
                                  databases[db]['username'])
+                if (access_network is not None and
+                        is_address_in_network(
+                            access_network,
+                            get_host_ip(databases[db]['hostname']))):
+                    db_host = get_address_in_network(access_network)
         if len(return_data) > 0:
             relation_set(relation_id=relation_id,
                          **return_data)
