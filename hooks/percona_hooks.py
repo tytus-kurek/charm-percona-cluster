@@ -113,7 +113,7 @@ def config_changed():
     # Notify any changes to the access network
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
-            shared_db_changed(r_id, unit)            
+            shared_db_changed(r_id, unit)
 
 
 @hooks.hook('cluster-relation-changed')
