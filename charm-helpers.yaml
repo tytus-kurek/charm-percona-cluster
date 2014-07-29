@@ -6,3 +6,4 @@ include:
     - contrib.hahelpers.cluster
     - contrib.peerstorage
     - payload.execd
+    - contrib.network.ip

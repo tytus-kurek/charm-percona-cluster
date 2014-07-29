@@ -1,37 +1,46 @@
 options:
-    source:
-        type: string
-        description: Package install location for Percona XtraDB Cluster (defaults to distro for >= 14.04)
-    dataset-size:
-        default: '80%'
-        type: string
-        description: How much data do you want to keep in memory in the DB. This will be used to tune settings in the database server appropriately. Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes. If suffixed with %, one will get that percentage of RAM devoted to dataset.
-    max-connections:
-        default: -1
-        type: int
-        description: Maximum connections to allow. -1 means use the server's compiled in default.
-    root-password:
-        type: string
-        description: Root password for MySQL access; must be configured pre-deployment for Active-Active clusters.
-    sst-password:
-        type: string
-        description: Re-sync account password for new cluster nodes; must be configured pre-deployment for Active-Active clusters.
-    vip:
-        type: string
-        description: Virtual IP to use to front Percona XtraDB Cluster in active/active HA configuration
-    vip_iface:
-        type: string
-        default: eth0
-        description: Network interface on which to place the Virtual IP
-    vip_cidr:
-        type: int
-        default: 24
-        description: Netmask that will be used for the Virtual IP
-    ha-bindiface:
-        type: string
-        default: eth0
-        description: Default network interface on which HA cluster will bind to communication with the other members of the HA Cluster.
-    ha-mcastport:
-        type: int
-        default: 5490
-        description: Default multicast port number that will be used to communicate between HA Cluster nodes.
+  source:
+    type: string
+    description: Package install location for Percona XtraDB Cluster (defaults to distro for >= 14.04)
+  dataset-size:
+    default: '80%'
+    type: string
+    description: How much data do you want to keep in memory in the DB. This will be used to tune settings in the database server appropriately. Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes. If suffixed with %, one will get that percentage of RAM devoted to dataset.
+  max-connections:
+    default: -1
+    type: int
+    description: Maximum connections to allow. -1 means use the server's compiled in default.
+  root-password:
+    type: string
+    description: Root password for MySQL access; must be configured pre-deployment for Active-Active clusters.
+  sst-password:
+    type: string
+    description: Re-sync account password for new cluster nodes; must be configured pre-deployment for Active-Active clusters.
+  vip:
+    type: string
+    description: Virtual IP to use to front Percona XtraDB Cluster in active/active HA configuration
+  vip_iface:
+    type: string
+    default: eth0
+    description: Network interface on which to place the Virtual IP
+  vip_cidr:
+    type: int
+    default: 24
+    description: Netmask that will be used for the Virtual IP
+  ha-bindiface:
+    type: string
+    default: eth0
+    description: Default network interface on which HA cluster will bind to communication with the other members of the HA Cluster.
+  ha-mcastport:
+    type: int
+    default: 5490
+    description: Default multicast port number that will be used to communicate between HA Cluster nodes.
+  # Network configuration options
+  # by default all access is over 'private-address'
+  access-network:
+    type: string
+    description: |
+      The IP address and netmask of the 'access' network (e.g., 192.168.0.0/24)
+      .
+      This network will be used for access to database services.
+
