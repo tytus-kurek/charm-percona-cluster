@@ -10,7 +10,8 @@ from string import upper
 from charmhelpers.core.host import pwgen, mkdir, write_file
 from charmhelpers.core.hookenv import unit_get, service_name
 from charmhelpers.core.hookenv import config as config_get
-from charmhelpers.fetch import apt_install, filter_installed_packages
+from charmhelpers.fetch import apt_install, apt_update, \
+                               filter_installed_packages
 
 from charmhelpers.contrib.peerstorage import (
     peer_store,
@@ -19,6 +20,7 @@ from charmhelpers.contrib.peerstorage import (
 try:
     import MySQLdb
 except ImportError:
+    apt_update(fatal=True)
     apt_install(filter_installed_packages(['python-mysqldb']),
                 fatal=True)
     import MySQLdb
@@ -179,7 +181,9 @@ def configure_db(hostname,
                  username,
                  admin=False):
     ''' Configure access to database for username from hostname '''
-    if hostname != unit_get('private-address'):
+    if config_get('prefer-ipv6'):
+        remote_ip = hostname
+    elif hostname != unit_get('private-address'):
         remote_ip = socket.gethostbyname(hostname)
     else:
         remote_ip = '127.0.0.1'

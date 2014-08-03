@@ -43,4 +43,8 @@ options:
       The IP address and netmask of the 'access' network (e.g., 192.168.0.0/24)
       .
       This network will be used for access to database services.
+  prefer-ipv6:
+    default: false
+    type: boolean
+    description: "Enable IPv6."
 

@@ -3,6 +3,8 @@
 
 import sys
 import os
+import socket
+
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
     log,
@@ -27,7 +29,8 @@ from charmhelpers.fetch import (
     add_source,
 )
 from charmhelpers.contrib.peerstorage import (
-    peer_echo
+    peer_echo,
+    peer_store,
 )
 from percona_utils import (
     PACKAGES,
@@ -57,6 +60,7 @@ from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
     is_address_in_network,
     get_address_in_network,
+    get_ipv6_addr,
 )
 
 hooks = Hooks()
@@ -88,6 +92,11 @@ def render_config(clustered=False, hosts=[]):
         'sst_password': get_mysql_password(username='sstuser',
                                            password=config('sst-password'))
     }
+
+    if config('prefer-ipv6'):
+        context['bind_address'] = '::'
+        context['wsrep_provider_options'] = 'gmcast.listen_addr=tcp://:::4567;' 
+
     context.update(parse_config())
     write_file(path=MY_CNF,
                content=render_template(os.path.basename(MY_CNF), context),
@@ -118,7 +127,9 @@ def config_changed():
 
 @hooks.hook('cluster-relation-changed')
 def cluster_changed():
-    peer_echo()
+    if config('prefer-ipv6'):
+        peer_store('private-address', get_ipv6_addr())
+        peer_store('hostname', socket.gethostname())
     config_changed()
 
 
@@ -135,10 +146,16 @@ def db_changed(relation_id=None, unit=None, admin=None):
         relation_clear(relation_id)
         return
 
-    if is_clustered():
-        db_host = config('vip')
+    if config('prefer-ipv6'):
+        if is_clustered():
+            db_host = '[%s]' % config('vip')
+        else:
+            db_host = '[%s]' % get_ipv6_addr()
     else:
-        db_host = unit_get('private-address')
+        if is_clustered():
+            db_host = config('vip')
+        else:
+            db_host = unit_get('private-address')
 
     if admin not in [True, False]:
         admin = relation_type() == 'db-admin'
@@ -172,10 +189,16 @@ def shared_db_changed(relation_id=None, unit=None):
 
     settings = relation_get(unit=unit,
                             rid=relation_id)
-    if is_clustered():
-        db_host = config('vip')
+    if config('prefer-ipv6'):
+        if is_clustered():
+            db_host = '[%s]' % config('vip')
+        else:
+            db_host = '[%s]' % get_ipv6_addr()
     else:
-        db_host = unit_get('private-address')
+        if is_clustered():
+            db_host = config('vip')
+        else:
+            db_host = unit_get('private-address')
 
     access_network = config('access-network')
 
@@ -256,11 +279,17 @@ def ha_relation_joined():
         log('Insufficient VIP information to configure cluster')
         sys.exit(1)
 
-    resources = {'res_mysql_vip': 'ocf:heartbeat:IPaddr2'}
-    resource_params = {
-        'res_mysql_vip': 'params ip="%s" cidr_netmask="%s" nic="%s"' %
-                         (vip, vip_cidr, vip_iface),
-    }
+    if config('prefer-ipv6'):
+        res_mysql_vip = 'ocf:heartbeat:IPv6addr'
+        vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
+                         (vip, vip_cidr, vip_iface)
+    else:
+        res_mysql_vip = 'ocf:heartbeat:IPaddr2'
+        vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
+                         (vip, vip_cidr, vip_iface)
+
+    resources = {'res_mysql_vip': res_mysql_vip}
+    resource_params = {'res_mysql_vip': vip_params}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     for rel_id in relation_ids('ha'):

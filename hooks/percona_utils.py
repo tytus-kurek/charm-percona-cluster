@@ -1,5 +1,4 @@
 ''' General utilities for percona '''
-import subprocess
 from subprocess import Popen, PIPE
 import socket
 import os
@@ -13,10 +12,14 @@ from charmhelpers.core.hookenv import (
     relation_get,
     relation_set,
     local_unit,
+    config,
 )
 from charmhelpers.fetch import (
     apt_install,
     filter_installed_packages,
+)
+from charmhelpers.contrib.network.ip import (
+    get_ipv6_addr,
 )
 from mysql import get_mysql_root_password, MySQLHelper
 
@@ -75,6 +78,14 @@ def render_template(template_name, context, template_dir=TEMPLATES_DIR):
 
 # TODO: goto charm-helpers (I use this everywhere)
 def get_host_ip(hostname=None):
+    if config('prefer-ipv6'):
+        private_address = get_ipv6_addr()
+        hostname = socket.gethostname()
+        host_map = {}
+        host_map[private_address] = hostname
+        render_hosts(host_map)
+        return hostname
+
     hostname = hostname or unit_get('private-address')
     try:
         # Test to see if already an IPv4 address
@@ -90,10 +101,20 @@ def get_host_ip(hostname=None):
 
 def get_cluster_hosts():
     hosts = [get_host_ip()]
+    hosts_map = {}
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
-            hosts.append(get_host_ip(relation_get('private-address',
-                                                  unit, relid)))
+            private_address = relation_get('private-address', unit, relid)
+            if config('prefer-ipv6'):
+                hostname = relation_get('hostname', unit, relid)
+                if not hostname or hostname in hosts:
+                    continue
+                hosts_map[private_address] = hostname
+                hosts.append(hostname)
+            else:
+                hosts.append(get_host_ip(private_address))
+
+    render_hosts(hosts_map)
     return hosts
 
 SQL_SST_USER_SETUP = "GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.*" \
@@ -133,3 +154,18 @@ def relation_clear(r_id=None):
             settings[setting] = None
     relation_set(relation_id=r_id,
                  **settings)
+
+
+def render_hosts(map):
+    if len(map) == 0:
+        return
+
+    with open('/etc/hosts', 'a+r') as hosts:
+        for ip, hostname in map.items():
+            if not ip or not hostname:
+                continue
+            for line in hosts:
+                if line.startswith(ip):
+                    break
+            else:
+                hosts.write(ip + ' ' + hostname + '\n')
