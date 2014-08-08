@@ -10,8 +10,11 @@ from string import upper
 from charmhelpers.core.host import pwgen, mkdir, write_file
 from charmhelpers.core.hookenv import unit_get, service_name
 from charmhelpers.core.hookenv import config as config_get
-from charmhelpers.fetch import apt_install, apt_update, \
-                               filter_installed_packages
+from charmhelpers.fetch import (
+    apt_install,
+    apt_update,
+    filter_installed_packages,
+)
 
 from charmhelpers.contrib.peerstorage import (
     peer_store,

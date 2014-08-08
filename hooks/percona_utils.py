@@ -1,4 +1,5 @@
 ''' General utilities for percona '''
+import subprocess
 from subprocess import Popen, PIPE
 import socket
 import os
