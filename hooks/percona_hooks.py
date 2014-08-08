@@ -29,7 +29,6 @@ from charmhelpers.fetch import (
     add_source,
 )
 from charmhelpers.contrib.peerstorage import (
-    peer_echo,
     peer_store,
 )
 from percona_utils import (
@@ -95,7 +94,7 @@ def render_config(clustered=False, hosts=[]):
 
     if config('prefer-ipv6'):
         context['bind_address'] = '::'
-        context['wsrep_provider_options'] = 'gmcast.listen_addr=tcp://:::4567;' 
+        context['wsrep_provider_options'] = 'gmcast.listen_addr=tcp://:::4567;'
 
     context.update(parse_config())
     write_file(path=MY_CNF,
@@ -282,11 +281,11 @@ def ha_relation_joined():
     if config('prefer-ipv6'):
         res_mysql_vip = 'ocf:heartbeat:IPv6addr'
         vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
-                         (vip, vip_cidr, vip_iface)
+                     (vip, vip_cidr, vip_iface)
     else:
         res_mysql_vip = 'ocf:heartbeat:IPaddr2'
         vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
-                         (vip, vip_cidr, vip_iface)
+                     (vip, vip_cidr, vip_iface)
 
     resources = {'res_mysql_vip': res_mysql_vip}
     resource_params = {'res_mysql_vip': vip_params}
