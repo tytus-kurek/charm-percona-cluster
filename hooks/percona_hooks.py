@@ -59,6 +59,7 @@ from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
     is_address_in_network,
     get_address_in_network,
+    get_netmask_for_address,
     get_ipv6_addr,
 )
 
@@ -281,7 +282,7 @@ def ha_relation_joined():
     if config('prefer-ipv6'):
         res_mysql_vip = 'ocf:heartbeat:IPv6addr'
         vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
-                     (vip, vip_cidr, vip_iface)
+                     (vip, get_netmask_for_address(vip), vip_iface)
     else:
         res_mysql_vip = 'ocf:heartbeat:IPaddr2'
         vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
