@@ -6,8 +6,10 @@ import os
 from charmhelpers.core.host import (
     lsb_release,
 )
+from charmhelpers.core.hookenv import relation_id as current_relation_id
 from charmhelpers.core.hookenv import (
     unit_get,
+    is_relation_made,
     relation_ids,
     related_units,
     relation_get,
@@ -19,6 +21,9 @@ from charmhelpers.fetch import (
     filter_installed_packages,
 )
 from mysql import get_mysql_root_password, MySQLHelper
+from charmhelpers.contrib.peerstorage import (
+    peer_store,
+)
 
 try:
     import jinja2
@@ -133,3 +138,13 @@ def relation_clear(r_id=None):
             settings[setting] = None
     relation_set(relation_id=r_id,
                  **settings)
+
+
+def relation_set_and_store(relation_id, **kwargs):
+    ''' For each pair set them in the relation but also store in peer db'''
+    if not relation_id:
+        relation_id = current_relation_id()
+    relation_set(relation_id=relation_id, **kwargs)
+    if is_relation_made('cluster'):
+        for key, value in kwargs.iteritems():
+            peer_store('_'.join([relation_id, key]), value)
