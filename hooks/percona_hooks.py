@@ -174,12 +174,13 @@ def shared_db_changed(relation_id=None, unit=None):
         # with the info dies the settings die with it Bug# 1355848
         if is_relation_made('cluster'):
             for rel_id in relation_ids('shared-db'):
-                rel_settings = {
-                    'db_host': config('vip'),
-                    'password': peer_retrieve(rel_id + '_password'),
-                    'access-network': config('access-network'),
-                }
-                relation_set(relation_id=rel_id, **rel_settings)
+                if peer_retrieve(rel_id + '_password'):
+                    rel_settings = {
+                        'db_host': config('vip'),
+                        'password': peer_retrieve(rel_id + '_password'),
+                        'access-network': config('access-network'),
+                    }
+                    relation_set(relation_id=rel_id, **rel_settings)
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
         return
