@@ -29,6 +29,7 @@ from charmhelpers.fetch import (
     add_source,
 )
 from charmhelpers.contrib.peerstorage import (
+    peer_store_and_set,
     peer_retrieve,
     peer_echo
 )
@@ -43,7 +44,6 @@ from percona_utils import (
     seeded, mark_seeded,
     configure_mysql_root_password,
     relation_clear,
-    relation_set_and_store,
 )
 from mysql import (
     get_mysql_password,
@@ -210,7 +210,7 @@ def shared_db_changed(relation_id=None, unit=None):
                 is_address_in_network(access_network,
                                       get_host_ip(settings['hostname']))):
             db_host = get_address_in_network(access_network)
-        relation_set_and_store(relation_id=relation_id,
+        peer_store_and_set(relation_id=relation_id,
                                db_host=db_host,
                                password=password)
     else:
@@ -252,9 +252,9 @@ def shared_db_changed(relation_id=None, unit=None):
                             get_host_ip(databases[db]['hostname']))):
                     db_host = get_address_in_network(access_network)
         if len(return_data) > 0:
-            relation_set_and_store(relation_id=relation_id,
+            peer_store_and_set(relation_id=relation_id,
                                    **return_data)
-            relation_set_and_store(relation_id=relation_id,
+            peer_store_and_set(relation_id=relation_id,
                                    db_host=db_host)
     relation_set(relation_id=relation_id,
                  relation_settings={'access-network': access_network})
