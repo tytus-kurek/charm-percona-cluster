@@ -3,7 +3,6 @@
 
 import sys
 import os
-from charmhelpers.core.hookenv import relation_id as current_relation_id
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
     is_relation_made,
@@ -174,14 +173,13 @@ def shared_db_changed(relation_id=None, unit=None):
         # Each unit needs to set the db information otherwise if the unit
         # with the info dies the settings die with it Bug# 1355848
         if is_relation_made('cluster'):
-            if not relation_id:
-                relation_id = current_relation_id()
-            rel_settings = {
-                'db_host': config('vip'),
-                'password': peer_retrieve(relation_id + '_password'),
-                'access-network': config('access-network'),
-            }
-            relation_set(relation_id=relation_id, **rel_settings)
+            for rel_id in relation_ids('shared-db'):
+                rel_settings = {
+                    'db_host': config('vip'),
+                    'password': peer_retrieve(rel_id + '_password'),
+                    'access-network': config('access-network'),
+                }
+                relation_set(relation_id=rel_id, **rel_settings)
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
         return
