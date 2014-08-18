@@ -6,10 +6,8 @@ import os
 from charmhelpers.core.host import (
     lsb_release,
 )
-from charmhelpers.core.hookenv import relation_id as current_relation_id
 from charmhelpers.core.hookenv import (
     unit_get,
-    is_relation_made,
     relation_ids,
     related_units,
     relation_get,
@@ -21,9 +19,6 @@ from charmhelpers.fetch import (
     filter_installed_packages,
 )
 from mysql import get_mysql_root_password, MySQLHelper
-from charmhelpers.contrib.peerstorage import (
-    peer_store,
-)
 
 try:
     import jinja2
