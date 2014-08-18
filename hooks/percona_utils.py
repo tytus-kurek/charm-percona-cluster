@@ -138,13 +138,3 @@ def relation_clear(r_id=None):
             settings[setting] = None
     relation_set(relation_id=r_id,
                  **settings)
-
-
-def relation_set_and_store(relation_id, **kwargs):
-    ''' For each pair set them in the relation but also store in peer db'''
-    if not relation_id:
-        relation_id = current_relation_id()
-    relation_set(relation_id=relation_id, **kwargs)
-    if is_relation_made('cluster'):
-        for key, value in kwargs.iteritems():
-            peer_store('_'.join([relation_id, key]), value)
