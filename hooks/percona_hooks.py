@@ -3,8 +3,10 @@
 
 import sys
 import os
+from charmhelpers.core.hookenv import relation_id as current_relation_id
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
+    is_relation_made,
     log,
     relation_get,
     relation_set,
@@ -27,6 +29,8 @@ from charmhelpers.fetch import (
     add_source,
 )
 from charmhelpers.contrib.peerstorage import (
+    peer_store_and_set,
+    peer_retrieve,
     peer_echo
 )
 from percona_utils import (
@@ -116,6 +120,7 @@ def config_changed():
             shared_db_changed(r_id, unit)
 
 
+@hooks.hook('cluster-relation-departed')
 @hooks.hook('cluster-relation-changed')
 def cluster_changed():
     peer_echo()
@@ -165,9 +170,20 @@ def db_changed(relation_id=None, unit=None, admin=None):
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
     if not eligible_leader(LEADER_RES):
+        relation_clear(relation_id)
+        # Each unit needs to set the db information otherwise if the unit
+        # with the info dies the settings die with it Bug# 1355848
+        if is_relation_made('cluster'):
+            if not relation_id:
+                relation_id = current_relation_id()
+            rel_settings = {
+                'db_host': config('vip'),
+                'password': peer_retrieve(relation_id + '_password'),
+                'access-network': config('access-network'),
+            }
+            relation_set(relation_id=relation_id, **rel_settings)
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
-        relation_clear(relation_id)
         return
 
     settings = relation_get(unit=unit,
@@ -194,9 +210,9 @@ def shared_db_changed(relation_id=None, unit=None):
                 is_address_in_network(access_network,
                                       get_host_ip(settings['hostname']))):
             db_host = get_address_in_network(access_network)
-        relation_set(relation_id=relation_id,
-                     db_host=db_host,
-                     password=password)
+        peer_store_and_set(relation_id=relation_id,
+                           db_host=db_host,
+                           password=password)
     else:
         # Process multiple database setup requests.
         # from incoming relation data:
@@ -236,10 +252,10 @@ def shared_db_changed(relation_id=None, unit=None):
                             get_host_ip(databases[db]['hostname']))):
                     db_host = get_address_in_network(access_network)
         if len(return_data) > 0:
-            relation_set(relation_id=relation_id,
-                         **return_data)
-            relation_set(relation_id=relation_id,
-                         db_host=db_host)
+            peer_store_and_set(relation_id=relation_id,
+                               **return_data)
+            peer_store_and_set(relation_id=relation_id,
+                               db_host=db_host)
     relation_set(relation_id=relation_id,
                  relation_settings={'access-network': access_network})
 
