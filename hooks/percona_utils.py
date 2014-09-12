@@ -158,15 +158,20 @@ def relation_clear(r_id=None):
 
 
 def render_hosts(map):
-    if len(map) == 0:
-        return
+    FILE = '/etc/hosts'
+    print "render_hosts"
+    with open(FILE, 'r') as hosts:
+        lines = hosts.readlines()
 
-    with open('/etc/hosts', 'a+r') as hosts:
-        for ip, hostname in map.items():
-            if not ip or not hostname:
-                continue
-            for line in hosts:
-                if line.startswith(ip):
-                    break
-            else:
-                hosts.write(ip + ' ' + hostname + '\n')
+    for ip, hostname in map.items():
+        if not ip or not hostname:
+            continue
+        for line in lines:
+            if line.startswith(ip) or hostname in line:
+                lines.remove(line)
+        lines.append(ip + ' ' + hostname + '\n')
+
+    with open(FILE, 'w') as hosts:
+        for line in lines:
+            hosts.write(line)
+
