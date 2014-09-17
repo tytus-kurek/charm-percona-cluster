@@ -133,8 +133,12 @@ def config_changed():
 @hooks.hook('cluster-relation-changed')
 def cluster_changed():
     if config('prefer-ipv6'):
-        peer_store('private-address', get_ipv6_addr())
-        peer_store('hostname', socket.gethostname())
+        relation_settings = {}
+        relation_settings['private-address'] = get_ipv6_addr()
+        relation_settings['hostname'] = socket.gethostname()
+        for rid in relation_ids('cluster'):
+            relation_set(relation_id=rid,
+                         relation_settings=relation_settings)
     config_changed()
 
 
@@ -151,14 +155,11 @@ def db_changed(relation_id=None, unit=None, admin=None):
         relation_clear(relation_id)
         return
 
-    if config('prefer-ipv6'):
-        if is_clustered():
-            db_host = '[%s]' % config('vip')
-        else:
-            db_host = '[%s]' % get_ipv6_addr()
+    if is_clustered():
+        db_host = config('vip')
     else:
-        if is_clustered():
-            db_host = config('vip')
+        if config('prefer-ipv6'):
+            db_host = get_ipv6_addr()
         else:
             db_host = unit_get('private-address')
 
@@ -205,14 +206,11 @@ def shared_db_changed(relation_id=None, unit=None):
 
     settings = relation_get(unit=unit,
                             rid=relation_id)
-    if config('prefer-ipv6'):
-        if is_clustered():
-            db_host = '[%s]' % config('vip')
-        else:
-            db_host = '[%s]' % get_ipv6_addr()
+    if is_clustered():
+        db_host = config('vip')
     else:
-        if is_clustered():
-            db_host = config('vip')
+        if config('prefer-ipv6'):
+            db_host = get_ipv6_addr()
         else:
             db_host = unit_get('private-address')
 
