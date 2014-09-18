@@ -77,14 +77,15 @@ def install():
         setup_percona_repo()
     elif config('source') is not None:
         add_source(config('source'))
+
+    if config('prefer-ipv6'):
+        setup_ipv6()
+
     configure_mysql_root_password(config('root-password'))
     render_config()  # Render base configuation (no cluster)
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
     configure_sstuser(config('sst-password'))
-
-    if config('prefer-ipv6'):
-        setup_ipv6()
 
 
 def render_config(clustered=False, hosts=[]):
