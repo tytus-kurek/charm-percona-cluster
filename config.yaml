@@ -47,4 +47,3 @@ options:
     default: false
     type: boolean
     description: "Enable IPv6."
-
