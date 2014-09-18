@@ -184,6 +184,7 @@ def configure_db(hostname,
                  username,
                  admin=False):
     ''' Configure access to database for username from hostname '''
+
     if config_get('prefer-ipv6'):
         remote_ip = hostname
     elif hostname != unit_get('private-address'):

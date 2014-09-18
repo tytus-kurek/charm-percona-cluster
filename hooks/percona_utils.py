@@ -4,7 +4,7 @@ from subprocess import Popen, PIPE
 import socket
 import os
 from charmhelpers.core.host import (
-    lsb_release,
+    lsb_release
 )
 from charmhelpers.core.hookenv import (
     unit_get,
@@ -13,16 +13,17 @@ from charmhelpers.core.hookenv import (
     relation_get,
     relation_set,
     local_unit,
-    config,
+    config
 )
 from charmhelpers.fetch import (
     apt_install,
-    filter_installed_packages,
+    filter_installed_packages
 )
 from charmhelpers.contrib.network.ip import (
-    get_ipv6_addr,
+    get_ipv6_addr
 )
 from mysql import get_mysql_root_password, MySQLHelper
+
 
 try:
     import jinja2
@@ -106,6 +107,7 @@ def get_cluster_hosts():
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
             private_address = relation_get('private-address', unit, relid)
+
             if config('prefer-ipv6'):
                 hostname = relation_get('hostname', unit, relid)
                 if not hostname or hostname in hosts:
@@ -175,3 +177,9 @@ def render_hosts(map):
         for line in lines:
             hosts.write(line)
 
+
+def setup_ipv6():
+    ubuntu_rel = float(lsb_release()['DISTRIB_RELEASE'])
+    if ubuntu_rel < 14.04:
+        raise Exception("IPv6 is not supported for Ubuntu "
+                        "versions less than Trusty 14.04")

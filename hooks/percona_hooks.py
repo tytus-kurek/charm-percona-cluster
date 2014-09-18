@@ -46,6 +46,7 @@ from percona_utils import (
     seeded, mark_seeded,
     configure_mysql_root_password,
     relation_clear,
+    setup_ipv6
 )
 from mysql import (
     get_mysql_password,
@@ -64,7 +65,7 @@ from charmhelpers.contrib.network.ip import (
     is_address_in_network,
     get_address_in_network,
     get_netmask_for_address,
-    get_ipv6_addr,
+    get_ipv6_addr
 )
 
 hooks = Hooks()
@@ -83,6 +84,9 @@ def install():
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
     configure_sstuser(config('sst-password'))
+    
+    if config('prefer-ipv6'):
+        setup_ipv6()
 
 
 def render_config(clustered=False, hosts=[]):
@@ -110,6 +114,9 @@ def render_config(clustered=False, hosts=[]):
 @hooks.hook('upgrade-charm')
 @hooks.hook('config-changed')
 def config_changed():
+    if config('prefer-ipv6'):
+        setup_ipv6()
+
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
     pre_hash = file_hash(MY_CNF)
