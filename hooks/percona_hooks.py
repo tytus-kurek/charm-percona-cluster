@@ -30,10 +30,8 @@ from charmhelpers.fetch import (
     add_source,
 )
 from charmhelpers.contrib.peerstorage import (
-    peer_store,
     peer_store_and_set,
-    peer_retrieve,
-    peer_echo
+    peer_retrieve
 )
 from percona_utils import (
     PACKAGES,
@@ -84,7 +82,7 @@ def install():
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
     configure_sstuser(config('sst-password'))
-    
+
     if config('prefer-ipv6'):
         setup_ipv6()
 
