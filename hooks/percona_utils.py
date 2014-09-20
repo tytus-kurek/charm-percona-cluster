@@ -81,7 +81,7 @@ def render_template(template_name, context, template_dir=TEMPLATES_DIR):
 # TODO: goto charm-helpers (I use this everywhere)
 def get_host_ip(hostname=None):
     if config('prefer-ipv6'):
-        private_address = get_ipv6_addr()
+        private_address = get_ipv6_addr()[0]
         hostname = socket.gethostname()
         host_map = {}
         host_map[private_address] = hostname

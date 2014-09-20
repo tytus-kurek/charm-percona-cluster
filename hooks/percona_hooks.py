@@ -140,7 +140,7 @@ def config_changed():
 def cluster_changed():
     if config('prefer-ipv6'):
         relation_settings = {}
-        relation_settings['private-address'] = get_ipv6_addr()
+        relation_settings['private-address'] = get_ipv6_addr()[0]
         relation_settings['hostname'] = socket.gethostname()
         for rid in relation_ids('cluster'):
             relation_set(relation_id=rid,
@@ -165,7 +165,7 @@ def db_changed(relation_id=None, unit=None, admin=None):
         db_host = config('vip')
     else:
         if config('prefer-ipv6'):
-            db_host = get_ipv6_addr()
+            db_host = get_ipv6_addr()[0]
         else:
             db_host = unit_get('private-address')
 
@@ -216,7 +216,7 @@ def shared_db_changed(relation_id=None, unit=None):
         db_host = config('vip')
     else:
         if config('prefer-ipv6'):
-            db_host = get_ipv6_addr()
+            db_host = get_ipv6_addr()[0]
         else:
             db_host = unit_get('private-address')
 
