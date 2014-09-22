@@ -31,7 +31,8 @@ from charmhelpers.fetch import (
 )
 from charmhelpers.contrib.peerstorage import (
     peer_store_and_set,
-    peer_retrieve
+    peer_retrieve,
+    peer_echo
 )
 from percona_utils import (
     PACKAGES,
@@ -138,6 +139,7 @@ def config_changed():
 @hooks.hook('cluster-relation-departed')
 @hooks.hook('cluster-relation-changed')
 def cluster_changed():
+    peer_echo()
     if config('prefer-ipv6'):
         relation_settings = {}
         addr = get_ipv6_addr(exc_list=[config('vip')])[0]
