@@ -233,9 +233,16 @@ def shared_db_changed(relation_id=None, unit=None):
 
     if singleset.issubset(settings):
         # Process a single database configuration
-        password = configure_db(settings['hostname'],
-                                settings['database'],
-                                settings['username'])
+        if isinstance(settings['hostname'], list):
+            for host in settings['hostname']:
+                password = configure_db(settings['hostname'],
+                                        settings['database'],
+                                        settings['username'])
+        else:
+            password = configure_db(settings['hostname'],
+                                    settings['database'],
+                                    settings['username'])
+
         if (access_network is not None and
                 is_address_in_network(access_network,
                                       get_host_ip(settings['hostname']))):
