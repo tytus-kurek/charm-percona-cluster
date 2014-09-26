@@ -46,7 +46,7 @@ from percona_utils import (
     seeded, mark_seeded,
     configure_mysql_root_password,
     relation_clear,
-    setup_ipv6
+    assert_charm_supports_ipv6
 )
 from mysql import (
     get_mysql_password,
@@ -81,7 +81,7 @@ def install():
         add_source(config('source'))
 
     if config('prefer-ipv6'):
-        setup_ipv6()
+        assert_charm_supports_ipv6()
 
     configure_mysql_root_password(config('root-password'))
     render_config()  # Render base configuation (no cluster)
@@ -116,7 +116,7 @@ def render_config(clustered=False, hosts=[]):
 @hooks.hook('config-changed')
 def config_changed():
     if config('prefer-ipv6'):
-        setup_ipv6()
+        assert_charm_supports_ipv6()
 
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
