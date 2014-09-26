@@ -235,7 +235,7 @@ def shared_db_changed(relation_id=None, unit=None):
         # Process a single database configuration
         if isinstance(settings['hostname'], list):
             for host in settings['hostname']:
-                password = configure_db(settings['hostname'],
+                password = configure_db(host,
                                         settings['database'],
                                         settings['username'])
         else:
