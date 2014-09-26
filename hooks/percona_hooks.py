@@ -2,6 +2,7 @@
 # TODO: Support changes to root and sstuser passwords
 
 import sys
+import json
 import os
 import socket
 
@@ -233,19 +234,27 @@ def shared_db_changed(relation_id=None, unit=None):
 
     if singleset.issubset(settings):
         # Process a single database configuration
-        if isinstance(settings['hostname'], list):
-            for host in settings['hostname']:
+
+        # Hostname can be json-encoded list of hostnames
+        hostname = settings['hostname']
+        try:
+            hostname = json.loads(hostname)
+        except ValueError:
+            pass
+
+        if isinstance(hostname, list):
+            for host in hostname:
                 password = configure_db(host,
                                         settings['database'],
                                         settings['username'])
         else:
-            password = configure_db(settings['hostname'],
+            password = configure_db(hostname,
                                     settings['database'],
                                     settings['username'])
 
         if (access_network is not None and
                 is_address_in_network(access_network,
-                                      get_host_ip(settings['hostname']))):
+                                      get_host_ip(hostname))):
             db_host = get_address_in_network(access_network)
         peer_store_and_set(relation_id=relation_id,
                            db_host=db_host,
