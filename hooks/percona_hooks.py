@@ -152,7 +152,7 @@ def cluster_changed():
     config_changed()
 
 
-LEADER_RES = 'res_mysql_vip'
+LEADER_RES = 'grp_percona_cluster'
 
 
 # TODO: This could be a hook common between mysql and percona-cluster
