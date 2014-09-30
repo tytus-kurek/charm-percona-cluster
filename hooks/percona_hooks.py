@@ -80,9 +80,6 @@ def install():
     elif config('source') is not None:
         add_source(config('source'))
 
-    if config('prefer-ipv6'):
-        assert_charm_supports_ipv6()
-
     configure_mysql_root_password(config('root-password'))
     render_config()  # Render base configuation (no cluster)
     apt_update(fatal=True)
@@ -137,18 +134,20 @@ def config_changed():
             shared_db_changed(r_id, unit)
 
 
+@hooks.hook('cluster-relation-joined')
+def cluster_joined(relation_id=None):
+    if config('prefer-ipv6'):
+        addr = get_ipv6_addr(exc_list=[config('vip')])[0]
+        relation_settings = {'private-address': addr,
+                             'hostname': socket.gethostname()}
+        relation_set(relation_id=relation_id,
+                     relation_settings=relation_settings)
+
+
 @hooks.hook('cluster-relation-departed')
 @hooks.hook('cluster-relation-changed')
 def cluster_changed():
     peer_echo()
-    if config('prefer-ipv6'):
-        relation_settings = {}
-        addr = get_ipv6_addr(exc_list=[config('vip')])[0]
-        relation_settings['private-address'] = addr
-        relation_settings['hostname'] = socket.gethostname()
-        for rid in relation_ids('cluster'):
-            relation_set(relation_id=rid,
-                         relation_settings=relation_settings)
     config_changed()
 
 
@@ -236,11 +235,10 @@ def shared_db_changed(relation_id=None, unit=None):
         # Process a single database configuration
 
         # Hostname can be json-encoded list of hostnames
-        hostname = settings['hostname']
         try:
-            hostname = json.loads(hostname)
+            hostname = json.loads(settings['hostname'])
         except ValueError:
-            pass
+            hostname = settings['hostname']
 
         if isinstance(hostname, list):
             for host in hostname:
@@ -285,13 +283,26 @@ def shared_db_changed(relation_id=None, unit=None):
             if db not in databases:
                 databases[db] = {}
             databases[db][x] = v
+
+        try:
+            hostname = json.loads(databases[db]['hostname'])
+        except ValueError:
+            hostname = databases[db]['hostname']
+
         return_data = {}
         for db in databases:
             if singleset.issubset(databases[db]):
-                return_data['_'.join([db, 'password'])] = \
-                    configure_db(databases[db]['hostname'],
-                                 databases[db]['database'],
-                                 databases[db]['username'])
+                if isinstance(hostname, list):
+                    for host in hostname:
+                        password = configure_db(host,
+                                                databases[db]['database'],
+                                                databases[db]['username'])
+                else:
+                    password = configure_db(hostname,
+                                            databases[db]['database'],
+                                            databases[db]['username'])
+
+                return_data['_'.join([db, 'password'])] = password
                 if (access_network is not None and
                         is_address_in_network(
                             access_network,
