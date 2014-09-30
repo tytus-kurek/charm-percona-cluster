@@ -252,7 +252,7 @@ def shared_db_changed(relation_id=None, unit=None):
 
         if (access_network is not None and
                 is_address_in_network(access_network,
-                                      get_host_ip(hostname))):
+                                      get_host_ip(settings['hostname']))):
             db_host = get_address_in_network(access_network)
         peer_store_and_set(relation_id=relation_id,
                            db_host=db_host,
@@ -284,14 +284,14 @@ def shared_db_changed(relation_id=None, unit=None):
                 databases[db] = {}
             databases[db][x] = v
 
-        try:
-            hostname = json.loads(databases[db]['hostname'])
-        except ValueError:
-            hostname = databases[db]['hostname']
-
         return_data = {}
         for db in databases:
             if singleset.issubset(databases[db]):
+                try:
+                    hostname = json.loads(databases[db]['hostname'])
+                except ValueError:
+                    hostname = databases[db]['hostname']
+
                 if isinstance(hostname, list):
                     for host in hostname:
                         password = configure_db(host,
