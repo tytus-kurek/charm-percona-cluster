@@ -133,3 +133,9 @@ def relation_clear(r_id=None):
             settings[setting] = None
     relation_set(relation_id=r_id,
                  **settings)
+
+
+def unit_sorted(units):
+    """Return a sorted list of unit names."""
+    return sorted(
+        units, lambda a, b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
