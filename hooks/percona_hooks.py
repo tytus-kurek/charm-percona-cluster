@@ -33,8 +33,7 @@ from charmhelpers.fetch import (
 )
 from charmhelpers.contrib.peerstorage import (
     peer_store_and_set,
-    peer_retrieve,
-    peer_echo
+    peer_retrieve
 )
 from percona_utils import (
     PACKAGES,
@@ -150,7 +149,6 @@ def cluster_joined(relation_id=None):
 @hooks.hook('cluster-relation-departed')
 @hooks.hook('cluster-relation-changed')
 def cluster_changed():
-    peer_echo()
     config_changed()
 
 

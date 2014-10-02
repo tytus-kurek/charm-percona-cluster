@@ -86,10 +86,7 @@ class UtilsTests(unittest.TestCase):
         mock_get_host_ip.return_value = 'hostA'
 
         def _mock_rel_get(key, *args):
-            if key == 'private-address':
-                return '0.0.0.0'
-            else:
-                raise Exception("unknown key")
+            return {'private-address': '0.0.0.0'}
 
         mock_rel_get.side_effect = _mock_rel_get
         mock_config.side_effect = lambda k: False
@@ -97,7 +94,7 @@ class UtilsTests(unittest.TestCase):
         hosts = percona_utils.get_cluster_hosts()
 
         self.assertFalse(mock_update_hosts_file.called)
-        mock_rel_get.assert_called_with('private-address', 2, 1)
+        mock_rel_get.assert_called_with(2, 1)
         self.assertEqual(hosts, ['hostA', 'hostA'])
 
     @mock.patch("percona_utils.log")
@@ -116,12 +113,8 @@ class UtilsTests(unittest.TestCase):
         mock_get_host_ip.return_value = 'hostA'
 
         def _mock_rel_get(key, *args):
-            if key == 'private-address':
-                return '0.0.0.0'
-            elif key == 'hostname':
-                return 'hostB'
-            else:
-                raise Exception("unknown key")
+            return {'private-address': '0.0.0.0',
+                    'hostname': 'hostB'}
 
         mock_rel_get.side_effect = _mock_rel_get
         mock_config.side_effect = lambda k: True
@@ -129,5 +122,5 @@ class UtilsTests(unittest.TestCase):
         hosts = percona_utils.get_cluster_hosts()
 
         mock_update_hosts_file.assert_called_with({'0.0.0.0': 'hostB'})
-        mock_rel_get.assert_called_with('hostname', 4, 2)
+        mock_rel_get.assert_called_with(4, 2)
         self.assertEqual(hosts, ['hostA', 'hostB'])
