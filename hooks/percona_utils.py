@@ -178,7 +178,7 @@ def update_hosts_file(map):
 
     log("Updating hosts file with: %s" % (map), level=INFO)
 
-    log("after: %s lines" % (len(lines)))
+    log("before: %s lines" % (len(lines)))
     key = re.compile("^(.+?)\s(.+)")
     newlines = []
     for ip, hostname in map.items():
