@@ -32,6 +32,7 @@ from charmhelpers.fetch import (
     add_source,
 )
 from charmhelpers.contrib.peerstorage import (
+    peer_echo,
     peer_store_and_set,
     peer_retrieve_by_prefix
 )
@@ -71,6 +72,8 @@ from charmhelpers.contrib.network.ip import (
 )
 
 hooks = Hooks()
+
+LEADER_RES = 'grp_percona_cluster'
 
 
 @hooks.hook('install')
@@ -151,10 +154,19 @@ def cluster_joined(relation_id=None):
 @hooks.hook('cluster-relation-departed')
 @hooks.hook('cluster-relation-changed')
 def cluster_changed():
+    # Need to make sure hostname is excluded to build inclusion list (paying
+    # attention to those excluded by default in peer_echo().
+    # TODO(dosaboy): extend peer_echo() to support providing exclusion list as
+    #                well as inclusion list.
+    rdata = relation_get()
+    inc_list = []
+    for attr in rdata.iterkeys():
+        if attr not in ['hostname', 'private-address', 'public-address']:
+            inc_list.append(attr)
+
+    peer_echo(includes=inc_list)
+
     config_changed()
-
-
-LEADER_RES = 'grp_percona_cluster'
 
 
 # TODO: This could be a hook common between mysql and percona-cluster
