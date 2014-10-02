@@ -101,18 +101,17 @@ def get_host_ip(hostname=None):
 
 
 def get_cluster_hosts():
-    hosts = []
+    hosts = [get_host_ip()]
     hosts_map = {}
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
             private_address = relation_get('private-address', unit, relid)
 
             if config('prefer-ipv6'):
-                hosts.append(get_host_ip())
                 hostname = relation_get('hostname', unit, relid)
-                if not hostname:
-                    log("No hostname provided by cluster relation for addr "
-                        "%s" % (private_address))
+                if not hostname or hostname in hosts:
+                    log("Ignoring hostname '%s' provided by cluster relation "
+                        "for addr %s" % (hostname, private_address))
                     continue
                 else:
                     log("hostname '%s' provided by cluster relation for addr "
@@ -123,7 +122,9 @@ def get_cluster_hosts():
             else:
                 hosts.append(get_host_ip(private_address))
 
-    update_hosts_file(hosts_map)
+    if hosts_map:
+        update_hosts_file(hosts_map)
+
     return hosts
 
 SQL_SST_USER_SETUP = "GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.*" \
@@ -175,7 +176,8 @@ def update_hosts_file(map):
     with open(HOSTS_FILE, 'r') as hosts:
         lines = hosts.readlines()
 
-    log("Updating hosts file with: %s" % (map), level=INFO)
+    log("Updating hosts file with: %s (current: %s)" % (map, lines),
+        level=INFO)
 
     log("before: %s lines" % (len(lines)))
     newlines = []
@@ -188,6 +190,8 @@ def update_hosts_file(map):
             _line = line.split()
             if not (_line[0] == ip or hostname in _line[1:]):
                 keepers.append(line)
+            else:
+                log("removing line '%s' from hosts file" % (line))
 
         lines = keepers
         newlines.append("%s %s\n" % (ip, hostname))

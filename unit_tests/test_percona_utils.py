@@ -79,14 +79,24 @@ class UtilsTests(unittest.TestCase):
                                mock_rel_get, mock_get_host_ip,
                                mock_update_hosts_file, mock_config,
                                mock_log):
-        mock_rel_ids.return_value = [1,2]
-        mock_rel_units.return_value = [3,4]
-        mock_rel_get.return_value = '0.0.0.0'
+        mock_rel_ids.return_value = [1]
+        mock_rel_units.return_value = [2]
+        mock_get_host_ip.return_value = 'hostA'
+
+        def _mock_rel_get(key, *args):
+            if key == 'private-address':
+                return '0.0.0.0'
+            else:
+                raise Exception("unknown key")
+
+        mock_rel_get.side_effect = _mock_rel_get
         mock_config.side_effect = lambda k: False
 
-        percona_utils.get_cluster_hosts()
+        hosts = percona_utils.get_cluster_hosts()
 
-        mock_rel_get.assert_called_with('private-address', 4, 2)
+        self.assertFalse(mock_update_hosts_file.called)
+        mock_rel_get.assert_called_with('private-address', 2, 1)
+        self.assertEqual(hosts, ['hostA', 'hostA'])
 
     @mock.patch("percona_utils.log")
     @mock.patch("percona_utils.config")
@@ -101,9 +111,21 @@ class UtilsTests(unittest.TestCase):
                                     mock_log):
         mock_rel_ids.return_value = [1,2]
         mock_rel_units.return_value = [3,4]
-        mock_rel_get.return_value = '0.0.0.0'
+        mock_get_host_ip.return_value = 'hostA'
+
+        def _mock_rel_get(key, *args):
+            if key == 'private-address':
+                return '0.0.0.0'
+            elif key == 'hostname':
+                return 'hostB'
+            else:
+                raise Exception("unknown key")
+
+        mock_rel_get.side_effect = _mock_rel_get
         mock_config.side_effect = lambda k: True
 
-        percona_utils.get_cluster_hosts()
+        hosts = percona_utils.get_cluster_hosts()
 
+        mock_update_hosts_file.assert_called_with({'0.0.0.0': 'hostB'})
         mock_rel_get.assert_called_with('hostname', 4, 2)
+        self.assertEqual(hosts, ['hostA', 'hostB'])
