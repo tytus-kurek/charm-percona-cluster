@@ -85,7 +85,7 @@ class UtilsTests(unittest.TestCase):
         mock_rel_units.return_value = [2]
         mock_get_host_ip.return_value = 'hostA'
 
-        def _mock_rel_get(key, *args):
+        def _mock_rel_get(*args, **kwargs):
             return {'private-address': '0.0.0.0'}
 
         mock_rel_get.side_effect = _mock_rel_get
@@ -94,7 +94,7 @@ class UtilsTests(unittest.TestCase):
         hosts = percona_utils.get_cluster_hosts()
 
         self.assertFalse(mock_update_hosts_file.called)
-        mock_rel_get.assert_called_with(2, 1)
+        mock_rel_get.assert_called_with(rid=1, unit=2)
         self.assertEqual(hosts, ['hostA', 'hostA'])
 
     @mock.patch("percona_utils.log")
@@ -112,7 +112,7 @@ class UtilsTests(unittest.TestCase):
         mock_rel_units.return_value = [3,4]
         mock_get_host_ip.return_value = 'hostA'
 
-        def _mock_rel_get(key, *args):
+        def _mock_rel_get(*args, **kwargs):
             return {'private-address': '0.0.0.0',
                     'hostname': 'hostB'}
 
@@ -122,5 +122,5 @@ class UtilsTests(unittest.TestCase):
         hosts = percona_utils.get_cluster_hosts()
 
         mock_update_hosts_file.assert_called_with({'0.0.0.0': 'hostB'})
-        mock_rel_get.assert_called_with(4, 2)
+        mock_rel_get.assert_called_with(rid=2, unit=4)
         self.assertEqual(hosts, ['hostA', 'hostB'])
