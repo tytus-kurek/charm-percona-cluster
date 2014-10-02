@@ -56,17 +56,19 @@ class UtilsTests(unittest.TestCase):
             percona_utils.HOSTS_FILE = tmpfile.name
 
             with open(tmpfile.name, 'w') as fd:
+                fd.write("#somedata\n")
                 fd.write("%s %s\n" % (altmap.items()[0]))
 
             percona_utils.update_hosts_file(map)
 
-        with open(tmpfile.name, 'r') as fd:
+        with open(percona_utils.HOSTS_FILE, 'r') as fd:
             lines = fd.readlines()
 
         os.remove(tmpfile.name)
-        self.assertEqual(len(lines), 4)
-        self.assertEqual(lines[0], "%s %s\n" % (map.items()[0]))
-        self.assertEqual(lines[3], "%s %s\n" % (map.items()[3]))
+        self.assertEqual(len(lines), 5)
+        self.assertEqual(lines[0], "#somedata\n")
+        self.assertEqual(lines[1], "%s %s\n" % (map.items()[0]))
+        self.assertEqual(lines[4], "%s %s\n" % (map.items()[3]))
 
     @mock.patch("percona_utils.log")
     @mock.patch("percona_utils.config")
