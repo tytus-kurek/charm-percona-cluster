@@ -47,8 +47,11 @@ class UtilsTests(unittest.TestCase):
 
     @mock.patch("percona_utils.log")
     def test_update_hosts_file_entry(self, mock_log):
-        altmap = {'2.4.6.8': 'alt-host'}
-        map = {'1.2.3.4': 'my-host'}
+        altmap = {'1.1.1.1': 'alt-host'}
+        map = {'1.1.1.1': 'hostA',
+               '2.2.2.2': 'hostB',
+               '3.3.3.3': 'hostC',
+               '4.4.4.4': 'hostD'}
         with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
             percona_utils.HOSTS_FILE = tmpfile.name
 
@@ -61,9 +64,9 @@ class UtilsTests(unittest.TestCase):
             lines = fd.readlines()
 
         os.remove(tmpfile.name)
-        self.assertEqual(len(lines), 2)
-        self.assertEqual(lines[0], "%s %s\n" % (altmap.items()[0]))
-        self.assertEqual(lines[1], "%s %s\n" % (map.items()[0]))
+        self.assertEqual(len(lines), 4)
+        self.assertEqual(lines[0], "%s %s\n" % (map.items()[0]))
+        self.assertEqual(lines[3], "%s %s\n" % (map.items()[3]))
 
     @mock.patch("percona_utils.log")
     @mock.patch("percona_utils.config")
