@@ -16,7 +16,8 @@ from charmhelpers.core.hookenv import (
     relation_set,
     local_unit,
     config,
-    log
+    log,
+    INFO
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -110,9 +111,13 @@ def get_cluster_hosts():
             if config('prefer-ipv6'):
                 hosts.append(get_host_ip())
                 hostname = relation_get('hostname', unit, relid)
-                log("hostname '%s' provided by cluster relation" % (hostname))
                 if not hostname:
+                    log("No hostname provided by cluster relation for addr "
+                        "%s" % (private_address))
                     continue
+                else:
+                    log("hostname '%s' provided by cluster relation for addr "
+                        "%s" % (hostname, private_address))
 
                 hosts_map[private_address] = hostname
                 hosts.append(hostname)
@@ -171,6 +176,9 @@ def update_hosts_file(map):
     with open(HOSTS_FILE, 'r') as hosts:
         lines = hosts.readlines()
 
+    log("Updating hosts file with: %s" % (map), level=INFO)
+
+    log("after: %s lines" % (len(lines)))
     key = re.compile("^(.+?)\s(.+)")
     newlines = []
     for ip, hostname in map.items():
@@ -179,15 +187,15 @@ def update_hosts_file(map):
 
         for line in lines:
             match = re.match(key, line)
-            if match:
-                if ((match.group(1) != ip and
-                     hostname not in match.group(2).split()) and
-                        line not in newlines):
-                    # keep the line
+            if not (match and
+                    (match.group(1) == ip or
+                     hostname in match.group(2).split())):
+                if line not in newlines:
                     newlines.append(line)
 
         newlines.append("%s %s\n" % (ip, hostname))
 
+    log("after: %s lines" % (len(newlines)))
     with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
         with open(tmpfile.name, 'w') as hosts:
             for line in newlines:
