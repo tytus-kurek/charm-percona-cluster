@@ -105,7 +105,7 @@ def get_cluster_hosts():
     hosts_map = {}
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
-            rdata = relation_get(unit, relid)
+            rdata = relation_get(unit=unit, rid=relid)
             private_address = rdata['private-address']
             if config('prefer-ipv6'):
                 hostname = rdata['hostname']
