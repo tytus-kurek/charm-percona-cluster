@@ -8,7 +8,13 @@ import os
 import glob
 from string import upper
 from charmhelpers.core.host import pwgen, mkdir, write_file
-from charmhelpers.core.hookenv import unit_get, service_name
+from charmhelpers.core.hookenv import (
+    relation_get,
+    relation_ids,
+    related_units,
+    service_name,
+    unit_get,
+)
 from charmhelpers.core.hookenv import config as config_get
 from charmhelpers.fetch import (
     apt_install,
@@ -57,6 +63,8 @@ class MySQLHelper():
 
     def grant_exists(self, db_name, db_user, remote_ip):
         cursor = self.connection.cursor()
+        priv_string = "GRANT ALL PRIVILEGES ON `{}`.* " \
+                      "TO '{}'@'{}'".format(db_name, db_user, remote_ip)
         try:
             cursor.execute("SHOW GRANTS for '{}'@'{}'".format(db_user,
                                                               remote_ip))
@@ -66,7 +74,7 @@ class MySQLHelper():
         finally:
             cursor.close()
         # TODO: review for different grants
-        return "GRANT ALL PRIVILEGES ON `{}`".format(db_name) in grants
+        return priv_string in grants
 
     def create_grant(self, db_name, db_user,
                      remote_ip, password):
@@ -318,3 +326,19 @@ def parse_config():
         if config['tuning-level'] == 'fast':
             mysql_config['sync_binlog'] = 0
     return mysql_config
+
+
+def get_allowed_units(database, username):
+    m_helper = MySQLHelper()
+    m_helper.connect(password=get_mysql_root_password())
+    allowed_units = set()
+    for relid in relation_ids('shared-db'):
+        for unit in related_units(relid):
+            unit_address = relation_get(attribute='private-address',
+                                        unit=unit,
+                                        rid=relid)
+            if m_helper.grant_exists(database,
+                                     username,
+                                     unit_address):
+                allowed_units.add(unit)
+    return allowed_units

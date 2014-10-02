@@ -213,3 +213,9 @@ def assert_charm_supports_ipv6():
     if lsb_release()['DISTRIB_CODENAME'].lower() < "trusty":
         raise Exception("IPv6 is not supported in the charms for Ubuntu "
                         "versions less than Trusty 14.04")
+
+
+def unit_sorted(units):
+    """Return a sorted list of unit names."""
+    return sorted(
+        units, lambda a, b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
