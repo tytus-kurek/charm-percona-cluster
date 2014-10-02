@@ -1,5 +1,4 @@
 ''' General utilities for percona '''
-import re
 import subprocess
 from subprocess import Popen, PIPE
 import socket
@@ -179,20 +178,18 @@ def update_hosts_file(map):
     log("Updating hosts file with: %s" % (map), level=INFO)
 
     log("before: %s lines" % (len(lines)))
-    key = re.compile("^(.+?)\s(.+)")
     newlines = []
     for ip, hostname in map.items():
         if not ip or not hostname:
             continue
 
+        keepers = []
         for line in lines:
-            match = re.match(key, line)
-            if not (match and
-                    (match.group(1) == ip or
-                     hostname in match.group(2).split())):
-                if line not in newlines:
-                    newlines.append(line)
+            _line = line.split()
+            if not (_line[0] == ip or hostname in _line[1:]):
+                keepers.append(line)
 
+        lines = keepers
         newlines.append("%s %s\n" % (ip, hostname))
 
     log("after: %s lines" % (len(newlines)))
