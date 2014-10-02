@@ -1,7 +1,9 @@
 ''' General utilities for percona '''
+import re
 import subprocess
 from subprocess import Popen, PIPE
 import socket
+import tempfile
 import os
 from charmhelpers.core.host import (
     lsb_release
@@ -13,7 +15,8 @@ from charmhelpers.core.hookenv import (
     relation_get,
     relation_set,
     local_unit,
-    config
+    config,
+    log
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -49,6 +52,7 @@ REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
 MY_CNF = "/etc/mysql/my.cnf"
 SEEDED_MARKER = "/var/lib/mysql/seeded"
+HOSTS_FILE = '/etc/hosts'
 
 
 def seeded():
@@ -78,15 +82,10 @@ def render_template(template_name, context, template_dir=TEMPLATES_DIR):
     return template.render(context)
 
 
-# TODO: goto charm-helpers (I use this everywhere)
 def get_host_ip(hostname=None):
     if config('prefer-ipv6'):
-        private_address = get_ipv6_addr(exc_list=[config('vip')])[0]
-        hostname = socket.gethostname()
-        host_map = {}
-        host_map[private_address] = hostname
-        render_hosts(host_map)
-        return hostname
+        get_ipv6_addr(exc_list=[config('vip')])[0]
+        return socket.gethostname()
 
     hostname = hostname or unit_get('private-address')
     try:
@@ -102,22 +101,25 @@ def get_host_ip(hostname=None):
 
 
 def get_cluster_hosts():
-    hosts = [get_host_ip()]
+    hosts = []
     hosts_map = {}
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
             private_address = relation_get('private-address', unit, relid)
 
             if config('prefer-ipv6'):
+                hosts.append(get_host_ip())
                 hostname = relation_get('hostname', unit, relid)
-                if not hostname or hostname in hosts:
+                log("hostname '%s' provided by cluster relation" % (hostname))
+                if not hostname:
                     continue
+
                 hosts_map[private_address] = hostname
                 hosts.append(hostname)
             else:
                 hosts.append(get_host_ip(private_address))
 
-    render_hosts(hosts_map)
+    update_hosts_file(hosts_map)
     return hosts
 
 SQL_SST_USER_SETUP = "GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.*" \
@@ -159,23 +161,39 @@ def relation_clear(r_id=None):
                  **settings)
 
 
-def render_hosts(map):
-    FILE = '/etc/hosts'
-    print "render_hosts"
-    with open(FILE, 'r') as hosts:
+def update_hosts_file(map):
+    """Percona does not currently like ipv6 addresses so we need to use dns
+    names instead. In order to make them resolvable we ensure they are  in
+    /etc/hosts.
+
+    See https://bugs.launchpad.net/galera/+bug/1130595 for some more info.
+    """
+    with open(HOSTS_FILE, 'r') as hosts:
         lines = hosts.readlines()
 
+    key = re.compile("^(.+?)\s(.+)")
+    newlines = []
     for ip, hostname in map.items():
         if not ip or not hostname:
             continue
-        for line in lines:
-            if line.startswith(ip) or hostname in line:
-                lines.remove(line)
-        lines.append(ip + ' ' + hostname + '\n')
 
-    with open(FILE, 'w') as hosts:
         for line in lines:
-            hosts.write(line)
+            match = re.match(key, line)
+            if match:
+                if ((match.group(1) != ip and
+                     hostname not in match.group(2).split()) and
+                        line not in newlines):
+                    # keep the line
+                    newlines.append(line)
+
+        newlines.append("%s %s\n" % (ip, hostname))
+
+    with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
+        with open(tmpfile.name, 'w') as hosts:
+            for line in newlines:
+                hosts.write(line)
+
+    os.rename(tmpfile.name, HOSTS_FILE)
 
 
 def assert_charm_supports_ipv6():
