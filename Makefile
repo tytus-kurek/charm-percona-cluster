@@ -1,9 +1,13 @@
 #!/usr/bin/make
 PYTHON := /usr/bin/env python
+export PYTHONPATH := hooks
 
 lint:
 	@flake8 --exclude hooks/charmhelpers hooks
 	@charm proof
+
+unit_test:
+	@$(PYTHON) /usr/bin/nosetests --nologcapture unit_tests
 
 bin/charm_helpers_sync.py:
 	@mkdir -p bin
