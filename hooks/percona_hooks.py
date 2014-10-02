@@ -17,7 +17,8 @@ from charmhelpers.core.hookenv import (
     unit_get,
     config,
     remote_unit,
-    relation_type
+    relation_type,
+    INFO
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -140,6 +141,8 @@ def cluster_joined(relation_id=None):
         addr = get_ipv6_addr(exc_list=[config('vip')])[0]
         relation_settings = {'private-address': addr,
                              'hostname': socket.gethostname()}
+        log("cluster relation setting '%s'" % (relation_settings),
+            level=INFO)
         relation_set(relation_id=relation_id,
                      relation_settings=relation_settings)
 
