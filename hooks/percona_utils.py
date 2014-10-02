@@ -188,7 +188,7 @@ def update_hosts_file(map):
         keepers = []
         for line in lines:
             _line = line.split()
-            if not (_line[0] == ip or hostname in _line[1:]):
+            if len(line) < 2 or not (_line[0] == ip or hostname in _line[1:]):
                 keepers.append(line)
             else:
                 log("removing line '%s' from hosts file" % (line))
@@ -196,10 +196,12 @@ def update_hosts_file(map):
         lines = keepers
         newlines.append("%s %s\n" % (ip, hostname))
 
-    log("after: %s lines" % (len(newlines)))
+    lines += newlines
+
+    log("after: %s lines" % (len(lines)))
     with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
         with open(tmpfile.name, 'w') as hosts:
-            for line in newlines:
+            for line in lines:
                 hosts.write(line)
 
     os.rename(tmpfile.name, HOSTS_FILE)
