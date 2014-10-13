@@ -97,6 +97,7 @@ class UtilsTests(unittest.TestCase):
         mock_rel_get.assert_called_with(rid=1, unit=2)
         self.assertEqual(hosts, ['hostA', 'hostA'])
 
+    @mock.patch("percona_utils.get_ipv6_addr")
     @mock.patch("percona_utils.log")
     @mock.patch("percona_utils.config")
     @mock.patch("percona_utils.update_hosts_file")
@@ -107,7 +108,9 @@ class UtilsTests(unittest.TestCase):
     def test_get_cluster_hosts_ipv6(self, mock_rel_ids, mock_rel_units,
                                     mock_rel_get, mock_get_host_ip,
                                     mock_update_hosts_file, mock_config,
-                                    mock_log):
+                                    mock_log, mock_get_ipv6_addr):
+        ipv6addr = '2001:db8:1:0:f816:3eff:fe79:cd'
+        mock_get_ipv6_addr.return_value = [ipv6addr]
         mock_rel_ids.return_value = [1,2]
         mock_rel_units.return_value = [3,4]
         mock_get_host_ip.return_value = 'hostA'
@@ -121,6 +124,7 @@ class UtilsTests(unittest.TestCase):
 
         hosts = percona_utils.get_cluster_hosts()
 
-        mock_update_hosts_file.assert_called_with({'0.0.0.0': 'hostB'})
+        mock_update_hosts_file.assert_called_with({ipv6addr: 'hostA',
+                                                   '0.0.0.0': 'hostB'})
         mock_rel_get.assert_called_with(rid=2, unit=4)
         self.assertEqual(hosts, ['hostA', 'hostB'])

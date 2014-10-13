@@ -84,7 +84,8 @@ def render_template(template_name, context, template_dir=TEMPLATES_DIR):
 
 def get_host_ip(hostname=None):
     if config('prefer-ipv6'):
-        get_ipv6_addr(exc_list=[config('vip')])[0]
+        # Ensure we have a valid ipv6 address configured
+        get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
         return socket.gethostname()
 
     hostname = hostname or unit_get('private-address')
@@ -101,8 +102,15 @@ def get_host_ip(hostname=None):
 
 
 def get_cluster_hosts():
-    hosts = [get_host_ip()]
     hosts_map = {}
+    hostname = get_host_ip()
+    hosts = [hostname]
+    # We need to add this localhost dns name to /etc/hosts along with peer
+    # hosts to ensure percona gets consistently resolved addresses.
+    if config('prefer-ipv6'):
+        addr = get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
+        hosts_map = {addr: hostname}
+
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
             rdata = relation_get(unit=unit, rid=relid)
