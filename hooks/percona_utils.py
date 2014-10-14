@@ -5,7 +5,8 @@ import socket
 import tempfile
 import os
 from charmhelpers.core.host import (
-    lsb_release
+    lsb_release,
+    write_file
 )
 from charmhelpers.core.hookenv import (
     unit_get,
@@ -73,7 +74,18 @@ def setup_percona_repo():
     subprocess.check_call(['apt-key', 'add', KEY])
 
 TEMPLATES_DIR = 'templates'
+FILES_DIR = 'files'
 
+def install_xtrabackup_ipv6_plugin():
+    with open(FILES_DIR+'/wsrep_sst_xtrabackup-v2-ipv6', 'r') as pluginfile:
+        new_plugin=pluginfile.read()
+    write_file(path='/usr/bin/wsrep_sst_xtrabackup-v2-ipv6', 
+               content=new_plugin, 
+               owner='root', 
+               group='root', 
+               perms=0o755)
+
+#   write_file(path, content, owner='root', group='root', perms=0444):
 
 def render_template(template_name, context, template_dir=TEMPLATES_DIR):
     templates = jinja2.Environment(
