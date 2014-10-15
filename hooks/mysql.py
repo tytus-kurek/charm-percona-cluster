@@ -351,6 +351,9 @@ def get_allowed_units(database, username):
                 else:
                     hosts = _hosts
 
+            if not isinstance(hosts, list):
+                hosts = [hosts]
+
             if hosts:
                 for host in hosts:
                     log("Checking host '%s' grant" % (host), level=INFO)
