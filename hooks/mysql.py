@@ -15,6 +15,8 @@ from charmhelpers.core.hookenv import (
     related_units,
     service_name,
     unit_get,
+    log,
+    INFO
 )
 from charmhelpers.core.hookenv import config as config_get
 from charmhelpers.fetch import (
@@ -335,7 +337,8 @@ def get_allowed_units(database, username):
     allowed_units = set()
     for relid in relation_ids('shared-db'):
         for unit in related_units(relid):
-            hosts = relation_get(attribute='hostname', unit=unit, rid=relid)
+            hosts = relation_get(attribute="%s_%s" % (database, 'hostname'),
+                                 unit=unit, rid=relid)
             if not hosts:
                 hosts = [relation_get(attribute='private-address', unit=unit,
                                       rid=relid)]
@@ -348,9 +351,13 @@ def get_allowed_units(database, username):
                 else:
                     hosts = _hosts
 
-            for host in hosts:
-                if m_helper.grant_exists(database, username, host):
-                    if unit not in allowed_units:
-                        allowed_units.add(unit)
+            if hosts:
+                for host in hosts:
+                    log("Checking host '%s' grant" % (host), level=INFO)
+                    if m_helper.grant_exists(database, username, host):
+                        if unit not in allowed_units:
+                            allowed_units.add(unit)
+            else:
+                log("No hosts found for grant check", level=INFO)
 
     return allowed_units

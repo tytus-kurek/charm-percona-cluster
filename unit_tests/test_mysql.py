@@ -16,7 +16,9 @@ class MysqlTests(unittest.TestCase):
     @mock.patch('mysql.relation_get')
     @mock.patch('mysql.related_units')
     @mock.patch('mysql.relation_ids')
-    def test_get_allowed_units(self, mock_relation_ids, mock_related_units, 
+    @mock.patch('mysql.log')
+    def test_get_allowed_units(self, mock_log, mock_relation_ids,
+                               mock_related_units, 
                                mock_relation_get, mock_helper,
                                mock_get_password):
         mock_relation_ids.return_value = ['r1']
@@ -25,7 +27,7 @@ class MysqlTests(unittest.TestCase):
         def mock_rel_get(attribute, unit, rid):
             if unit == 'ru2':
                 d = {'private-address': '1.2.3.4',
-                     'hostname': json.dumps(['2.3.4.5', '6.7.8.9'])}
+                     'dbA_hostname': json.dumps(['2.3.4.5', '6.7.8.9'])}
             else:
                 d = {'private-address': '1.2.3.4'}
 
