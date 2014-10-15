@@ -5,8 +5,7 @@ import socket
 import tempfile
 import os
 from charmhelpers.core.host import (
-    lsb_release,
-    write_file
+    lsb_release
 )
 from charmhelpers.core.hookenv import (
     unit_get,
@@ -76,14 +75,13 @@ def setup_percona_repo():
 TEMPLATES_DIR = 'templates'
 FILES_DIR = 'files'
 
+
 def install_xtrabackup_ipv6_plugin():
-    with open(FILES_DIR+'/wsrep_sst_xtrabackup-v2-ipv6', 'r') as pluginfile:
-        new_plugin=pluginfile.read()
-    write_file(path='/usr/bin/wsrep_sst_xtrabackup-v2-ipv6', 
-               content=new_plugin, 
-               owner='root', 
-               group='root', 
-               perms=0o755)
+    plugin = "wsrep_sst_xtrabackup-v2-ipv6"
+    dst = '/usr/bin/wsrep_sst_xtrabackup-v2-ipv6'
+    os.copy(os.path.join(FILES_DIR, plugin), dst)
+    os.chmod(dst, 0o755)
+
 
 #   write_file(path, content, owner='root', group='root', perms=0444):
 

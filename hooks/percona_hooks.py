@@ -88,7 +88,6 @@ def install():
 
     configure_mysql_root_password(config('root-password'))
     render_config()  # Render base configuation (no cluster)
-    install_xtrabackup_ipv6_plugin()
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
     configure_sstuser(config('sst-password'))
@@ -103,14 +102,19 @@ def render_config(clustered=False, hosts=[]):
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
         'sst_password': get_mysql_password(username='sstuser',
-                                           password=config('sst-password')),
-        'sst_method': 'xtrabackup-v2'
+                                           password=config('sst-password'))
     }
 
     if config('prefer-ipv6'):
+        # NOTE(hopem): this is a kludge to get percona working with ipv6.
+        # See lp 1380747 for more info. This is intended as a stop gap until
+        # percona package is fixed to support ipv6.
+        install_xtrabackup_ipv6_plugin()
+        context['sst_method'] = 'xtrabackup-v2-ipv6'
         context['bind_address'] = '::'
         context['wsrep_provider_options'] = 'gmcast.listen_addr=tcp://:::4567;'
-        context['sst_method'] = 'xtrabackup-v2-ipv6'
+    else:
+        context['sst_method'] = 'xtrabackup-v2'
 
     context.update(parse_config())
     write_file(path=MY_CNF,
