@@ -4,6 +4,7 @@ from subprocess import Popen, PIPE
 import socket
 import tempfile
 import os
+import shutil
 from charmhelpers.core.host import (
     lsb_release
 )
@@ -79,7 +80,7 @@ FILES_DIR = 'files'
 def install_xtrabackup_ipv6_plugin():
     plugin = "wsrep_sst_xtrabackup-v2-ipv6"
     dst = '/usr/bin/%s' % (plugin)
-    os.copy(os.path.join(FILES_DIR, plugin), dst)
+    shutil.copy(os.path.join(FILES_DIR, plugin), dst)
     os.chmod(dst, 0o755)
 
 
