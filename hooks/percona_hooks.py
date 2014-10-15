@@ -48,7 +48,8 @@ from percona_utils import (
     configure_mysql_root_password,
     relation_clear,
     assert_charm_supports_ipv6,
-    unit_sorted
+    unit_sorted,
+    install_xtrabackup_ipv6_plugin
 )
 from mysql import (
     get_allowed_units,
@@ -105,8 +106,15 @@ def render_config(clustered=False, hosts=[]):
     }
 
     if config('prefer-ipv6'):
+        # NOTE(hopem): this is a kludge to get percona working with ipv6.
+        # See lp 1380747 for more info. This is intended as a stop gap until
+        # percona package is fixed to support ipv6.
+        install_xtrabackup_ipv6_plugin()
+        context['sst_method'] = 'xtrabackup-v2-ipv6'
         context['bind_address'] = '::'
         context['wsrep_provider_options'] = 'gmcast.listen_addr=tcp://:::4567;'
+    else:
+        context['sst_method'] = 'xtrabackup-v2'
 
     context.update(parse_config())
     write_file(path=MY_CNF,
