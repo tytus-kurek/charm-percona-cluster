@@ -78,7 +78,7 @@ FILES_DIR = 'files'
 
 def install_xtrabackup_ipv6_plugin():
     plugin = "wsrep_sst_xtrabackup-v2-ipv6"
-    dst = '/usr/bin/wsrep_sst_xtrabackup-v2-ipv6'
+    dst = '/usr/bin/%s' % (plugin)
     os.copy(os.path.join(FILES_DIR, plugin), dst)
     os.chmod(dst, 0o755)
 
