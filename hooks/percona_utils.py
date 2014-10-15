@@ -83,8 +83,6 @@ def install_xtrabackup_ipv6_plugin():
     os.chmod(dst, 0o755)
 
 
-#   write_file(path, content, owner='root', group='root', perms=0444):
-
 def render_template(template_name, context, template_dir=TEMPLATES_DIR):
     templates = jinja2.Environment(
         loader=jinja2.FileSystemLoader(template_dir))
