@@ -1,5 +1,6 @@
 ''' Helper for working with a MySQL database '''
 # TODO: Contribute to charm-helpers
+import json
 import socket
 import re
 import sys
@@ -334,11 +335,22 @@ def get_allowed_units(database, username):
     allowed_units = set()
     for relid in relation_ids('shared-db'):
         for unit in related_units(relid):
-            unit_address = relation_get(attribute='private-address',
-                                        unit=unit,
-                                        rid=relid)
-            if m_helper.grant_exists(database,
-                                     username,
-                                     unit_address):
-                allowed_units.add(unit)
+            hosts = relation_get(attribute='hostname', unit=unit, rid=relid)
+            if not hosts:
+                hosts = [relation_get(attribute='private-address', unit=unit,
+                                      rid=relid)]
+            else:
+                # hostname can be json-encoded list of hostnames
+                try:
+                    _hosts = json.loads(hosts)
+                except ValueError:
+                    pass
+                else:
+                    hosts = _hosts
+
+            for host in hosts:
+                if m_helper.grant_exists(database, username, host):
+                    if unit not in allowed_units:
+                        allowed_units.add(unit)
+
     return allowed_units
