@@ -114,7 +114,7 @@ def render_config(clustered=False, hosts=[]):
         context['bind_address'] = '::'
         context['wsrep_provider_options'] = 'gmcast.listen_addr=tcp://:::4567;'
     else:
-        context['sst_method'] = 'xtrabackup-v2'
+        context['sst_method'] = 'xtrabackup'
 
     context.update(parse_config())
     write_file(path=MY_CNF,
