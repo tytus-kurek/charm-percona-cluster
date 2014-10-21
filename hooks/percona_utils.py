@@ -4,7 +4,6 @@ from subprocess import Popen, PIPE
 import socket
 import tempfile
 import os
-import shutil
 from charmhelpers.core.host import (
     lsb_release
 )
@@ -75,13 +74,6 @@ def setup_percona_repo():
 
 TEMPLATES_DIR = 'templates'
 FILES_DIR = 'files'
-
-
-def install_xtrabackup_ipv6_plugin():
-    plugin = "wsrep_sst_xtrabackup-v2-ipv6"
-    dst = '/usr/bin/%s' % (plugin)
-    shutil.copy(os.path.join(FILES_DIR, plugin), dst)
-    os.chmod(dst, 0o755)
 
 
 def render_template(template_name, context, template_dir=TEMPLATES_DIR):
