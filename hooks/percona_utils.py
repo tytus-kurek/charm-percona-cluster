@@ -4,7 +4,6 @@ from subprocess import Popen, PIPE
 import socket
 import tempfile
 import os
-import shutil
 from charmhelpers.core.host import (
     lsb_release
 )
