@@ -100,7 +100,7 @@ def render_config(clustered=False, hosts=[]):
         'private_address': get_host_ip(),
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
-        'sst_meethod' : 'xtrabackup'
+        'sst_meethod' : 'xtrabackup',
         'sst_password': get_mysql_password(username='sstuser',
                                            password=config('sst-password'))
     }
