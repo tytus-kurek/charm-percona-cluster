@@ -60,8 +60,8 @@ from charmhelpers.contrib.hahelpers.cluster import (
 from mysql import configure_db
 from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
-    is_address_in_network,
     get_address_in_network,
+    is_address_in_network,
 )
 
 hooks = Hooks()
@@ -167,6 +167,17 @@ def db_changed(relation_id=None, unit=None, admin=None):
                  )
 
 
+def get_db_host(client_hostname):
+    client_ip = get_host_ip(client_hostname)
+    if is_clustered():
+        return config('vip')
+    access_network = config('access-network')
+    if (access_network is not None and
+            is_address_in_network(access_network, client_ip)):
+        return get_address_in_network(access_network)
+    return unit_get('private-address')
+
+
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
@@ -188,11 +199,6 @@ def shared_db_changed(relation_id=None, unit=None):
 
     settings = relation_get(unit=unit,
                             rid=relation_id)
-    if is_clustered():
-        db_host = config('vip')
-    else:
-        db_host = unit_get('private-address')
-
     access_network = config('access-network')
 
     singleset = set([
@@ -209,10 +215,7 @@ def shared_db_changed(relation_id=None, unit=None):
         allowed_units = " ".join(unit_sorted(get_allowed_units(
             settings['database'],
             settings['username'])))
-        if (access_network is not None and
-                is_address_in_network(access_network,
-                                      get_host_ip(settings['hostname']))):
-            db_host = get_address_in_network(access_network)
+        db_host = get_db_host(settings['hostname'])
         peer_store_and_set(relation_id=relation_id,
                            db_host=db_host,
                            password=password,
@@ -254,11 +257,7 @@ def shared_db_changed(relation_id=None, unit=None):
                     " ".join(unit_sorted(get_allowed_units(
                         databases[db]['database'],
                         databases[db]['username'])))
-                if (access_network is not None and
-                        is_address_in_network(
-                            access_network,
-                            get_host_ip(databases[db]['hostname']))):
-                    db_host = get_address_in_network(access_network)
+                db_host = get_db_host(databases[db]['hostname'])
         if len(return_data) > 0:
             peer_store_and_set(relation_id=relation_id,
                                **return_data)
