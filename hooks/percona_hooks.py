@@ -167,7 +167,8 @@ def db_changed(relation_id=None, unit=None, admin=None):
                  )
 
 
-def get_db_host(client_ip):
+def get_db_host(client_hostname):
+    client_ip = get_host_ip(client_hostname)
     if is_clustered():
         return config('vip')
     access_network = config('access-network')
@@ -214,7 +215,7 @@ def shared_db_changed(relation_id=None, unit=None):
         allowed_units = " ".join(unit_sorted(get_allowed_units(
             settings['database'],
             settings['username'])))
-        db_host = get_db_host(get_host_ip(settings['hostname']))
+        db_host = get_db_host(settings['hostname'])
         peer_store_and_set(relation_id=relation_id,
                            db_host=db_host,
                            password=password,
@@ -256,10 +257,10 @@ def shared_db_changed(relation_id=None, unit=None):
                     " ".join(unit_sorted(get_allowed_units(
                         databases[db]['database'],
                         databases[db]['username'])))
+                db_host = get_db_host(databases[db]['hostname'])
         if len(return_data) > 0:
             peer_store_and_set(relation_id=relation_id,
                                **return_data)
-            db_host = get_db_host(databases[db]['hostname'])
             peer_store_and_set(relation_id=relation_id,
                                db_host=db_host)
     peer_store_and_set(relation_id=relation_id,
