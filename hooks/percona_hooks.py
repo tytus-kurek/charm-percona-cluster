@@ -76,22 +76,29 @@ def install():
     elif config('source') is not None:
         add_source(config('source'))
     configure_mysql_root_password(config('root-password'))
-    render_config()  # Render base configuation (no cluster)
+    mysql_password = get_mysql_password(username='sstuser',
+                                        password=config('sst-password'))
+    # Render base configuration (no cluster)
+    render_config(mysql_password=mysql_password)
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
-    configure_sstuser(config('sst-password'))
+    configure_sstuser(mysql_password)
 
 
-def render_config(clustered=False, hosts=[]):
+def render_config(clustered=False, hosts=[], mysql_password=None):
     if not os.path.exists(os.path.dirname(MY_CNF)):
         os.makedirs(os.path.dirname(MY_CNF))
+
+    if not mysql_password:
+        mysql_password = get_mysql_password(username='sstuser',
+                                            password=config('sst-password'))
+
     context = {
         'cluster_name': 'juju_cluster',
         'private_address': get_host_ip(),
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
-        'sst_password': get_mysql_password(username='sstuser',
-                                           password=config('sst-password'))
+        'sst_password': mysql_password,
     }
     context.update(parse_config())
     write_file(path=MY_CNF,
