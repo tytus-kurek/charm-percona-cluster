@@ -137,8 +137,12 @@ def get_cluster_hosts():
 
     return hosts
 
+# IPv4 localhost
 SQL_SST_USER_SETUP = "GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.*" \
     " TO 'sstuser'@'localhost' IDENTIFIED BY '{}'"
+# IPv6 localhost
+SQL_SST_USER_SETUP = "GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.*" \
+    " TO 'sstuser'@'ip6-localnet' IDENTIFIED BY '{}'"
 
 
 def configure_sstuser(sst_password):
