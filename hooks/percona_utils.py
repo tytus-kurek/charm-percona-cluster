@@ -138,13 +138,18 @@ def get_cluster_hosts():
     return hosts
 
 
+SQL_SST_USER_SETUP = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* "
+                      "TO 'sstuser'@'localhost' IDENTIFIED BY '{}'")
+
+SQL_SST_USER_SETUP_IPV6 = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT "
+                           "ON *.* TO 'sstuser'@'ip6-localhost' IDENTIFIED "
+                           "BY '{}'")
+
 def configure_sstuser(sst_password):
     m_helper = MySQLHelper()
     m_helper.connect(password=get_mysql_root_password())
-    sqlstr = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* "
-              "TO 'sstuser'@'%(host)s' IDENTIFIED BY '%(passwd)s'")
-    for host in ['localhost', 'ip6-localhost']:
-        m_helper.execute(sqlstr % {'host': host, 'passwd': sst_password})
+    m_helper.execute(SQL_SST_USER_SETUP.format(sst_password))
+    m_helper.execute(SQL_SST_USER_SETUP_IPV6.format(sst_password))
 
 
 # TODO: mysql charmhelper
