@@ -143,7 +143,7 @@ def configure_sstuser(sst_password):
     m_helper.connect(password=get_mysql_root_password())
     sqlstr = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* "
               "TO 'sstuser'@'%(host)s' IDENTIFIED BY '%(passwd)s'")
-    for host in ['localhost', 'ip6-localnet']:
+    for host in ['localhost', 'ip6-localhost']:
         m_helper.execute(sqlstr % {'host': host, 'passwd': sst_password})
 
 
