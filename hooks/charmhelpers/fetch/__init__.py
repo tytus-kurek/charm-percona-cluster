@@ -72,6 +72,7 @@ CLOUD_ARCHIVE_POCKETS = {
 FETCH_HANDLERS = (
     'charmhelpers.fetch.archiveurl.ArchiveUrlFetchHandler',
     'charmhelpers.fetch.bzrurl.BzrUrlFetchHandler',
+    'charmhelpers.fetch.giturl.GitUrlFetchHandler',
 )
 
 APT_NO_LOCK = 100  # The return code for "couldn't acquire lock" in APT.
@@ -255,7 +256,7 @@ def add_source(source, key=None):
     elif source == 'distro':
         pass
     else:
-        raise SourceConfigError("Unknown source: {!r}".format(source))
+        log("Unknown source: {!r}".format(source))
 
     if key:
         if '-----BEGIN PGP PUBLIC KEY BLOCK-----' in key:
