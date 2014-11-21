@@ -145,6 +145,7 @@ SQL_SST_USER_SETUP_IPV6 = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT "
                            "ON *.* TO 'sstuser'@'ip6-localhost' IDENTIFIED "
                            "BY '{}'")
 
+
 def configure_sstuser(sst_password):
     m_helper = MySQLHelper()
     m_helper.connect(password=get_mysql_root_password())
