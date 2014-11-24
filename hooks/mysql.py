@@ -16,7 +16,7 @@ from charmhelpers.core.hookenv import (
     service_name,
     unit_get,
     log,
-    INFO
+    INFO,
 )
 from charmhelpers.core.hookenv import config as config_get
 from charmhelpers.fetch import (
