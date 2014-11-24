@@ -18,7 +18,7 @@ from charmhelpers.core.hookenv import (
     config,
     remote_unit,
     relation_type,
-    INFO
+    INFO,
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -34,7 +34,7 @@ from charmhelpers.fetch import (
 from charmhelpers.contrib.peerstorage import (
     peer_echo,
     peer_store_and_set,
-    peer_retrieve_by_prefix
+    peer_retrieve_by_prefix,
 )
 from percona_utils import (
     PACKAGES,
@@ -48,7 +48,7 @@ from percona_utils import (
     configure_mysql_root_password,
     relation_clear,
     assert_charm_supports_ipv6,
-    unit_sorted
+    unit_sorted,
 )
 from mysql import (
     get_allowed_units,
@@ -273,27 +273,25 @@ def shared_db_changed(relation_id=None, unit=None):
     if singleset.issubset(settings):
         # Process a single database configuration
 
+        hostname = settings['hostname']
+        database = settings['database']
+        username = settings['username']
+
         # Hostname can be json-encoded list of hostnames
         try:
-            hostname = json.loads(settings['hostname'])
+            hostname = json.loads(hostname)
         except ValueError:
-            hostname = settings['hostname']
+            pass
 
         if isinstance(hostname, list):
             for host in hostname:
-                password = configure_db(host,
-                                        settings['database'],
-                                        settings['username'])
+                password = configure_db(host, database, username)
         else:
-            password = configure_db(hostname,
-                                    settings['database'],
-                                    settings['username'])
+            password = configure_db(hostname, database, username)
 
-        allowed_units = " ".join(unit_sorted(get_allowed_units(
-            settings['database'],
-            settings['username'])))
-
-        db_host = get_db_host(settings['hostname'])
+        allowed_units = unit_sorted(get_allowed_units(database, username))
+        allowed_units = ' '.join(allowed_units)
+        db_host = get_db_host(hostname)
         peer_store_and_set(relation_id=relation_id,
                            db_host=db_host,
                            password=password,
@@ -327,30 +325,28 @@ def shared_db_changed(relation_id=None, unit=None):
 
         return_data = {}
         for db in databases:
+            database = databases[db]['database']
+            hostname = databases[db]['hostname']
+            username = databases[db]['username']
             if singleset.issubset(databases[db]):
                 try:
-                    hostname = json.loads(databases[db]['hostname'])
+                    hostname = json.loads(hostname)
                 except ValueError:
-                    hostname = databases[db]['hostname']
+                    pass
 
                 if isinstance(hostname, list):
                     for host in hostname:
-                        password = configure_db(host,
-                                                databases[db]['database'],
-                                                databases[db]['username'])
+                        password = configure_db(host, database, username)
                 else:
-                    password = configure_db(hostname,
-                                            databases[db]['database'],
-                                            databases[db]['username'])
+                    password = configure_db(hostname, database, username)
 
                 return_data['_'.join([db, 'password'])] = password
 
                 return_data['_'.join([db, 'allowed_units'])] = \
-                    " ".join(unit_sorted(get_allowed_units(
-                        databases[db]['database'],
-                        databases[db]['username'])))
+                    " ".join(unit_sorted(get_allowed_units(database,
+                                                           username)))
 
-                db_host = get_db_host(databases[db]['hostname'])
+                db_host = get_db_host(hostname)
 
         if len(return_data) > 0:
             peer_store_and_set(relation_id=relation_id,
