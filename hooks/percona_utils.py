@@ -2,9 +2,10 @@
 import subprocess
 from subprocess import Popen, PIPE
 import socket
+import tempfile
 import os
 from charmhelpers.core.host import (
-    lsb_release,
+    lsb_release
 )
 from charmhelpers.core.hookenv import (
     unit_get,
@@ -13,12 +14,19 @@ from charmhelpers.core.hookenv import (
     relation_get,
     relation_set,
     local_unit,
+    config,
+    log,
+    INFO
 )
 from charmhelpers.fetch import (
     apt_install,
-    filter_installed_packages,
+    filter_installed_packages
+)
+from charmhelpers.contrib.network.ip import (
+    get_ipv6_addr
 )
 from mysql import get_mysql_root_password, MySQLHelper
+
 
 try:
     import jinja2
@@ -44,6 +52,7 @@ REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
 MY_CNF = "/etc/mysql/my.cnf"
 SEEDED_MARKER = "/var/lib/mysql/seeded"
+HOSTS_FILE = '/etc/hosts'
 
 
 def seeded():
@@ -64,6 +73,7 @@ def setup_percona_repo():
     subprocess.check_call(['apt-key', 'add', KEY])
 
 TEMPLATES_DIR = 'templates'
+FILES_DIR = 'files'
 
 
 def render_template(template_name, context, template_dir=TEMPLATES_DIR):
@@ -73,8 +83,12 @@ def render_template(template_name, context, template_dir=TEMPLATES_DIR):
     return template.render(context)
 
 
-# TODO: goto charm-helpers (I use this everywhere)
 def get_host_ip(hostname=None):
+    if config('prefer-ipv6'):
+        # Ensure we have a valid ipv6 address configured
+        get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
+        return socket.gethostname()
+
     hostname = hostname or unit_get('private-address')
     try:
         # Test to see if already an IPv4 address
@@ -89,21 +103,54 @@ def get_host_ip(hostname=None):
 
 
 def get_cluster_hosts():
-    hosts = [get_host_ip()]
+    hosts_map = {}
+    hostname = get_host_ip()
+    hosts = [hostname]
+    # We need to add this localhost dns name to /etc/hosts along with peer
+    # hosts to ensure percona gets consistently resolved addresses.
+    if config('prefer-ipv6'):
+        addr = get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
+        hosts_map = {addr: hostname}
+
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
-            hosts.append(get_host_ip(relation_get('private-address',
-                                                  unit, relid)))
+            rdata = relation_get(unit=unit, rid=relid)
+            private_address = rdata.get('private-address')
+            if config('prefer-ipv6'):
+                hostname = rdata.get('hostname')
+                if not hostname or hostname in hosts:
+                    log("(unit=%s) Ignoring hostname '%s' provided by cluster "
+                        "relation for addr %s" %
+                        (unit, hostname, private_address))
+                    continue
+                else:
+                    log("(unit=%s) hostname '%s' provided by cluster relation "
+                        "for addr %s" % (unit, hostname, private_address))
+
+                hosts_map[private_address] = hostname
+                hosts.append(hostname)
+            else:
+                hosts.append(get_host_ip(private_address))
+
+    if hosts_map:
+        update_hosts_file(hosts_map)
+
     return hosts
 
-SQL_SST_USER_SETUP = "GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.*" \
-    " TO 'sstuser'@'localhost' IDENTIFIED BY '{}'"
+
+SQL_SST_USER_SETUP = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT ON *.* "
+                      "TO 'sstuser'@'localhost' IDENTIFIED BY '{}'")
+
+SQL_SST_USER_SETUP_IPV6 = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT "
+                           "ON *.* TO 'sstuser'@'ip6-localhost' IDENTIFIED "
+                           "BY '{}'")
 
 
 def configure_sstuser(sst_password):
     m_helper = MySQLHelper()
     m_helper.connect(password=get_mysql_root_password())
     m_helper.execute(SQL_SST_USER_SETUP.format(sst_password))
+    m_helper.execute(SQL_SST_USER_SETUP_IPV6.format(sst_password))
 
 
 # TODO: mysql charmhelper
@@ -133,6 +180,53 @@ def relation_clear(r_id=None):
             settings[setting] = None
     relation_set(relation_id=r_id,
                  **settings)
+
+
+def update_hosts_file(map):
+    """Percona does not currently like ipv6 addresses so we need to use dns
+    names instead. In order to make them resolvable we ensure they are  in
+    /etc/hosts.
+
+    See https://bugs.launchpad.net/galera/+bug/1130595 for some more info.
+    """
+    with open(HOSTS_FILE, 'r') as hosts:
+        lines = hosts.readlines()
+
+    log("Updating hosts file with: %s (current: %s)" % (map, lines),
+        level=INFO)
+
+    newlines = []
+    for ip, hostname in map.items():
+        if not ip or not hostname:
+            continue
+
+        keepers = []
+        for line in lines:
+            _line = line.split()
+            if len(line) < 2 or not (_line[0] == ip or hostname in _line[1:]):
+                keepers.append(line)
+            else:
+                log("Removing line '%s' from hosts file" % (line))
+
+        lines = keepers
+        newlines.append("%s %s\n" % (ip, hostname))
+
+    lines += newlines
+
+    with tempfile.NamedTemporaryFile(delete=False) as tmpfile:
+        with open(tmpfile.name, 'w') as hosts:
+            for line in lines:
+                hosts.write(line)
+
+    os.rename(tmpfile.name, HOSTS_FILE)
+    os.chmod(HOSTS_FILE, 0o644)
+
+
+def assert_charm_supports_ipv6():
+    """Check whether we are able to support charms ipv6."""
+    if lsb_release()['DISTRIB_CODENAME'].lower() < "trusty":
+        raise Exception("IPv6 is not supported in the charms for Ubuntu "
+                        "versions less than Trusty 14.04")
 
 
 def unit_sorted(units):

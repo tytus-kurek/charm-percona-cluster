@@ -1,5 +1,6 @@
 ''' Helper for working with a MySQL database '''
 # TODO: Contribute to charm-helpers
+import json
 import socket
 import re
 import sys
@@ -14,9 +15,15 @@ from charmhelpers.core.hookenv import (
     related_units,
     service_name,
     unit_get,
+    log,
+    INFO,
 )
 from charmhelpers.core.hookenv import config as config_get
-from charmhelpers.fetch import apt_install, filter_installed_packages
+from charmhelpers.fetch import (
+    apt_install,
+    apt_update,
+    filter_installed_packages,
+)
 
 from charmhelpers.contrib.peerstorage import (
     peer_store,
@@ -25,6 +32,7 @@ from charmhelpers.contrib.peerstorage import (
 try:
     import MySQLdb
 except ImportError:
+    apt_update(fatal=True)
     apt_install(filter_installed_packages(['python-mysqldb']),
                 fatal=True)
     import MySQLdb
@@ -187,7 +195,10 @@ def configure_db(hostname,
                  username,
                  admin=False):
     ''' Configure access to database for username from hostname '''
-    if hostname != unit_get('private-address'):
+
+    if config_get('prefer-ipv6'):
+        remote_ip = hostname
+    elif hostname != unit_get('private-address'):
         remote_ip = socket.gethostbyname(hostname)
     else:
         remote_ip = '127.0.0.1'
@@ -326,11 +337,30 @@ def get_allowed_units(database, username):
     allowed_units = set()
     for relid in relation_ids('shared-db'):
         for unit in related_units(relid):
-            unit_address = relation_get(attribute='private-address',
-                                        unit=unit,
-                                        rid=relid)
-            if m_helper.grant_exists(database,
-                                     username,
-                                     unit_address):
-                allowed_units.add(unit)
+            hosts = relation_get(attribute="%s_%s" % (database, 'hostname'),
+                                 unit=unit, rid=relid)
+            if not hosts:
+                hosts = [relation_get(attribute='private-address', unit=unit,
+                                      rid=relid)]
+            else:
+                # hostname can be json-encoded list of hostnames
+                try:
+                    _hosts = json.loads(hosts)
+                except ValueError:
+                    pass
+                else:
+                    hosts = _hosts
+
+            if not isinstance(hosts, list):
+                hosts = [hosts]
+
+            if hosts:
+                for host in hosts:
+                    log("Checking host '%s' grant" % (host), level=INFO)
+                    if m_helper.grant_exists(database, username, host):
+                        if unit not in allowed_units:
+                            allowed_units.add(unit)
+            else:
+                log("No hosts found for grant check", level=INFO)
+
     return allowed_units
