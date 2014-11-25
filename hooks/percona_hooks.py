@@ -325,10 +325,10 @@ def shared_db_changed(relation_id=None, unit=None):
 
         return_data = {}
         for db in databases:
-            database = databases[db]['database']
-            hostname = databases[db]['hostname']
-            username = databases[db]['username']
             if singleset.issubset(databases[db]):
+                database = databases[db]['database']
+                hostname = databases[db]['hostname']
+                username = databases[db]['username']
                 try:
                     hostname = json.loads(hostname)
                 except ValueError:
