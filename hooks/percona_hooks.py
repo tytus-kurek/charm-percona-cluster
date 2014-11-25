@@ -24,7 +24,7 @@ from charmhelpers.core.host import (
     service_restart,
     file_hash,
     write_file,
-    lsb_release
+    lsb_release,
 )
 from charmhelpers.fetch import (
     apt_update,
@@ -60,7 +60,7 @@ from charmhelpers.contrib.hahelpers.cluster import (
     oldest_peer,
     eligible_leader,
     is_clustered,
-    is_leader
+    is_leader,
 )
 from mysql import configure_db
 from charmhelpers.payload.execd import execd_preinstall
@@ -68,7 +68,7 @@ from charmhelpers.contrib.network.ip import (
     get_address_in_network,
     get_netmask_for_address,
     get_ipv6_addr,
-    is_address_in_network
+    is_address_in_network,
 )
 
 hooks = Hooks()
@@ -244,16 +244,17 @@ def shared_db_changed(relation_id=None, unit=None):
             for rel_id in relation_ids('shared-db'):
                 peerdb_settings = \
                     peer_retrieve_by_prefix(rel_id, exc_list=['hostname'])
+
                 passwords = [key for key in peerdb_settings.keys()
                              if 'password' in key.lower()]
                 if len(passwords) > 0:
                     relation_set(relation_id=rel_id, **peerdb_settings)
+
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
         return
 
-    settings = relation_get(unit=unit,
-                            rid=relation_id)
+    settings = relation_get(unit=unit, rid=relation_id)
     if is_clustered():
         db_host = config('vip')
     else:
@@ -264,15 +265,9 @@ def shared_db_changed(relation_id=None, unit=None):
 
     access_network = config('access-network')
 
-    singleset = set([
-        'database',
-        'username',
-        'hostname'
-    ])
-
+    singleset = set(['database', 'username', 'hostname'])
     if singleset.issubset(settings):
         # Process a single database configuration
-
         hostname = settings['hostname']
         database = settings['database']
         username = settings['username']
@@ -341,11 +336,9 @@ def shared_db_changed(relation_id=None, unit=None):
                     password = configure_db(hostname, database, username)
 
                 return_data['_'.join([db, 'password'])] = password
-
                 return_data['_'.join([db, 'allowed_units'])] = \
                     " ".join(unit_sorted(get_allowed_units(database,
                                                            username)))
-
                 db_host = get_db_host(hostname)
 
         if len(return_data) > 0:
@@ -353,6 +346,7 @@ def shared_db_changed(relation_id=None, unit=None):
                                **return_data)
             peer_store_and_set(relation_id=relation_id,
                                db_host=db_host)
+
     peer_store_and_set(relation_id=relation_id,
                        relation_settings={'access-network': access_network})
 
