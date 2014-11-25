@@ -2,7 +2,10 @@
 # TODO: Support changes to root and sstuser passwords
 
 import sys
+import json
 import os
+import socket
+
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
     is_relation_made,
@@ -14,13 +17,14 @@ from charmhelpers.core.hookenv import (
     unit_get,
     config,
     remote_unit,
-    relation_type
+    relation_type,
+    INFO,
 )
 from charmhelpers.core.host import (
     service_restart,
     file_hash,
     write_file,
-    lsb_release
+    lsb_release,
 )
 from charmhelpers.fetch import (
     apt_update,
@@ -28,9 +32,9 @@ from charmhelpers.fetch import (
     add_source,
 )
 from charmhelpers.contrib.peerstorage import (
+    peer_echo,
     peer_store_and_set,
     peer_retrieve_by_prefix,
-    peer_echo
 )
 from percona_utils import (
     PACKAGES,
@@ -43,6 +47,7 @@ from percona_utils import (
     seeded, mark_seeded,
     configure_mysql_root_password,
     relation_clear,
+    assert_charm_supports_ipv6,
     unit_sorted,
 )
 from mysql import (
@@ -55,16 +60,20 @@ from charmhelpers.contrib.hahelpers.cluster import (
     oldest_peer,
     eligible_leader,
     is_clustered,
-    is_leader
+    is_leader,
 )
 from mysql import configure_db
 from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
+    get_netmask_for_address,
+    get_ipv6_addr,
     is_address_in_network,
 )
 
 hooks = Hooks()
+
+LEADER_RES = 'grp_percona_cluster'
 
 
 @hooks.hook('install')
@@ -75,6 +84,7 @@ def install():
         setup_percona_repo()
     elif config('source') is not None:
         add_source(config('source'))
+
     configure_mysql_root_password(config('root-password'))
     mysql_password = get_mysql_password(username='sstuser',
                                         password=config('sst-password'))
@@ -98,8 +108,20 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         'private_address': get_host_ip(),
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
-        'sst_password': mysql_password,
+        'sst_method': 'xtrabackup',
+        'sst_password': mysql_password
     }
+
+    if config('prefer-ipv6'):
+        # NOTE(hopem): this is a kludge to get percona working with ipv6.
+        # See lp 1380747 for more info. This is intended as a stop gap until
+        # percona package is fixed to support ipv6.
+        context['bind_address'] = '::'
+        context['wsrep_provider_options'] = 'gmcast.listen_addr=tcp://:::4567;'
+        context['ipv6'] = True
+    else:
+        context['ipv6'] = False
+
     context.update(parse_config())
     write_file(path=MY_CNF,
                content=render_template(os.path.basename(MY_CNF), context),
@@ -109,6 +131,9 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
 @hooks.hook('upgrade-charm')
 @hooks.hook('config-changed')
 def config_changed():
+    if config('prefer-ipv6'):
+        assert_charm_supports_ipv6()
+
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
     pre_hash = file_hash(MY_CNF)
@@ -128,14 +153,34 @@ def config_changed():
             shared_db_changed(r_id, unit)
 
 
+@hooks.hook('cluster-relation-joined')
+def cluster_joined(relation_id=None):
+    if config('prefer-ipv6'):
+        addr = get_ipv6_addr(exc_list=[config('vip')])[0]
+        relation_settings = {'private-address': addr,
+                             'hostname': socket.gethostname()}
+        log("Setting cluster relation: '%s'" % (relation_settings),
+            level=INFO)
+        relation_set(relation_id=relation_id,
+                     relation_settings=relation_settings)
+
+
 @hooks.hook('cluster-relation-departed')
 @hooks.hook('cluster-relation-changed')
 def cluster_changed():
-    peer_echo()
+    # Need to make sure hostname is excluded to build inclusion list (paying
+    # attention to those excluded by default in peer_echo().
+    # TODO(dosaboy): extend peer_echo() to support providing exclusion list as
+    #                well as inclusion list.
+    rdata = relation_get()
+    inc_list = []
+    for attr in rdata.iterkeys():
+        if attr not in ['hostname', 'private-address', 'public-address']:
+            inc_list.append(attr)
+
+    peer_echo(includes=inc_list)
+
     config_changed()
-
-
-LEADER_RES = 'res_mysql_vip'
 
 
 # TODO: This could be a hook common between mysql and percona-cluster
@@ -151,7 +196,10 @@ def db_changed(relation_id=None, unit=None, admin=None):
     if is_clustered():
         db_host = config('vip')
     else:
-        db_host = unit_get('private-address')
+        if config('prefer-ipv6'):
+            db_host = get_ipv6_addr(exc_list=[config('vip')])[0]
+        else:
+            db_host = unit_get('private-address')
 
     if admin not in [True, False]:
         admin = relation_type() == 'db-admin'
@@ -196,33 +244,49 @@ def shared_db_changed(relation_id=None, unit=None):
             for rel_id in relation_ids('shared-db'):
                 peerdb_settings = \
                     peer_retrieve_by_prefix(rel_id, exc_list=['hostname'])
+
                 passwords = [key for key in peerdb_settings.keys()
                              if 'password' in key.lower()]
                 if len(passwords) > 0:
                     relation_set(relation_id=rel_id, **peerdb_settings)
+
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
         return
 
-    settings = relation_get(unit=unit,
-                            rid=relation_id)
+    settings = relation_get(unit=unit, rid=relation_id)
+    if is_clustered():
+        db_host = config('vip')
+    else:
+        if config('prefer-ipv6'):
+            db_host = get_ipv6_addr(exc_list=[config('vip')])[0]
+        else:
+            db_host = unit_get('private-address')
+
     access_network = config('access-network')
 
-    singleset = set([
-        'database',
-        'username',
-        'hostname'
-    ])
-
+    singleset = set(['database', 'username', 'hostname'])
     if singleset.issubset(settings):
         # Process a single database configuration
-        password = configure_db(settings['hostname'],
-                                settings['database'],
-                                settings['username'])
-        allowed_units = " ".join(unit_sorted(get_allowed_units(
-            settings['database'],
-            settings['username'])))
-        db_host = get_db_host(settings['hostname'])
+        hostname = settings['hostname']
+        database = settings['database']
+        username = settings['username']
+
+        # Hostname can be json-encoded list of hostnames
+        try:
+            hostname = json.loads(hostname)
+        except ValueError:
+            pass
+
+        if isinstance(hostname, list):
+            for host in hostname:
+                password = configure_db(host, database, username)
+        else:
+            password = configure_db(hostname, database, username)
+
+        allowed_units = unit_sorted(get_allowed_units(database, username))
+        allowed_units = ' '.join(allowed_units)
+        db_host = get_db_host(hostname)
         peer_store_and_set(relation_id=relation_id,
                            db_host=db_host,
                            password=password,
@@ -253,23 +317,36 @@ def shared_db_changed(relation_id=None, unit=None):
             if db not in databases:
                 databases[db] = {}
             databases[db][x] = v
+
         return_data = {}
         for db in databases:
             if singleset.issubset(databases[db]):
-                return_data['_'.join([db, 'password'])] = \
-                    configure_db(databases[db]['hostname'],
-                                 databases[db]['database'],
-                                 databases[db]['username'])
+                database = databases[db]['database']
+                hostname = databases[db]['hostname']
+                username = databases[db]['username']
+                try:
+                    hostname = json.loads(hostname)
+                except ValueError:
+                    pass
+
+                if isinstance(hostname, list):
+                    for host in hostname:
+                        password = configure_db(host, database, username)
+                else:
+                    password = configure_db(hostname, database, username)
+
+                return_data['_'.join([db, 'password'])] = password
                 return_data['_'.join([db, 'allowed_units'])] = \
-                    " ".join(unit_sorted(get_allowed_units(
-                        databases[db]['database'],
-                        databases[db]['username'])))
-                db_host = get_db_host(databases[db]['hostname'])
+                    " ".join(unit_sorted(get_allowed_units(database,
+                                                           username)))
+                db_host = get_db_host(hostname)
+
         if len(return_data) > 0:
             peer_store_and_set(relation_id=relation_id,
                                **return_data)
             peer_store_and_set(relation_id=relation_id,
                                db_host=db_host)
+
     peer_store_and_set(relation_id=relation_id,
                        relation_settings={'access-network': access_network})
 
@@ -286,11 +363,17 @@ def ha_relation_joined():
         log('Insufficient VIP information to configure cluster')
         sys.exit(1)
 
-    resources = {'res_mysql_vip': 'ocf:heartbeat:IPaddr2'}
-    resource_params = {
-        'res_mysql_vip': 'params ip="%s" cidr_netmask="%s" nic="%s"' %
-                         (vip, vip_cidr, vip_iface),
-    }
+    if config('prefer-ipv6'):
+        res_mysql_vip = 'ocf:heartbeat:IPv6addr'
+        vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
+                     (vip, get_netmask_for_address(vip), vip_iface)
+    else:
+        res_mysql_vip = 'ocf:heartbeat:IPaddr2'
+        vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
+                     (vip, vip_cidr, vip_iface)
+
+    resources = {'res_mysql_vip': res_mysql_vip}
+    resource_params = {'res_mysql_vip': vip_params}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     for rel_id in relation_ids('ha'):
