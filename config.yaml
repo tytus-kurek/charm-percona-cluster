@@ -1,6 +1,7 @@
 options:
   source:
     type: string
+    default:
     description: Package install location for Percona XtraDB Cluster (defaults to distro for >= 14.04)
   dataset-size:
     default: '80%'
@@ -12,12 +13,15 @@ options:
     description: Maximum connections to allow. -1 means use the server's compiled in default.
   root-password:
     type: string
+    default:
     description: Root password for MySQL access; must be configured pre-deployment for Active-Active clusters.
   sst-password:
     type: string
+    default:
     description: Re-sync account password for new cluster nodes; must be configured pre-deployment for Active-Active clusters.
   vip:
     type: string
+    default:
     description: Virtual IP to use to front Percona XtraDB Cluster in active/active HA configuration
   vip_iface:
     type: string
@@ -39,6 +43,7 @@ options:
   # by default all access is over 'private-address'
   access-network:
     type: string
+    default:
     description: |
       The IP address and netmask of the 'access' network (e.g., 192.168.0.0/24)
       .
