@@ -28,13 +28,6 @@ from charmhelpers.contrib.network.ip import (
 from mysql import get_mysql_root_password, MySQLHelper
 
 
-try:
-    import dns.resolver
-except ImportError:
-    apt_install(filter_installed_packages(['python-dnspython']),
-                fatal=True)
-    import dns.resolver
-
 PACKAGES = [
     'percona-xtradb-cluster-server-5.5',
     'percona-xtradb-cluster-client-5.5',
@@ -67,6 +60,13 @@ def setup_percona_repo():
 
 
 def get_host_ip(hostname=None):
+    try:
+        import dns.resolver
+    except ImportError:
+        apt_install(filter_installed_packages(['python-dnspython']),
+                    fatal=True)
+        import dns.resolver
+
     if config('prefer-ipv6'):
         # Ensure we have a valid ipv6 address configured
         get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
