@@ -28,20 +28,6 @@ from charmhelpers.contrib.network.ip import (
 from mysql import get_mysql_root_password, MySQLHelper
 
 
-try:
-    import jinja2
-except ImportError:
-    apt_install(filter_installed_packages(['python-jinja2']),
-                fatal=True)
-    import jinja2
-
-try:
-    import dns.resolver
-except ImportError:
-    apt_install(filter_installed_packages(['python-dnspython']),
-                fatal=True)
-    import dns.resolver
-
 PACKAGES = [
     'percona-xtradb-cluster-server-5.5',
     'percona-xtradb-cluster-client-5.5',
@@ -72,18 +58,15 @@ def setup_percona_repo():
         sources.write(REPO.format(release=lsb_release()['DISTRIB_CODENAME']))
     subprocess.check_call(['apt-key', 'add', KEY])
 
-TEMPLATES_DIR = 'templates'
-FILES_DIR = 'files'
-
-
-def render_template(template_name, context, template_dir=TEMPLATES_DIR):
-    templates = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(template_dir))
-    template = templates.get_template(template_name)
-    return template.render(context)
-
 
 def get_host_ip(hostname=None):
+    try:
+        import dns.resolver
+    except ImportError:
+        apt_install(filter_installed_packages(['python-dnspython']),
+                    fatal=True)
+        import dns.resolver
+
     if config('prefer-ipv6'):
         # Ensure we have a valid ipv6 address configured
         get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
