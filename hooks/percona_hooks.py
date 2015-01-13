@@ -26,6 +26,7 @@ from charmhelpers.core.host import (
     write_file,
     lsb_release,
 )
+from charmhelpers.core.templating import render
 from charmhelpers.fetch import (
     apt_update,
     apt_install,
@@ -40,7 +41,6 @@ from percona_utils import (
     PACKAGES,
     MY_CNF,
     setup_percona_repo,
-    render_template,
     get_host_ip,
     get_cluster_hosts,
     configure_sstuser,
@@ -123,9 +123,7 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         context['ipv6'] = False
 
     context.update(parse_config())
-    write_file(path=MY_CNF,
-               content=render_template(os.path.basename(MY_CNF), context),
-               perms=0o444)
+    render(os.path.basename(MY_CNF), MY_CNF, context, perms=0o444)
 
 
 @hooks.hook('upgrade-charm')
