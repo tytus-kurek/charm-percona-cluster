@@ -16,7 +16,7 @@ from charmhelpers.core.hookenv import (
     local_unit,
     config,
     log,
-    INFO
+    DEBUG,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -104,11 +104,12 @@ def get_cluster_hosts():
                 if not hostname or hostname in hosts:
                     log("(unit=%s) Ignoring hostname '%s' provided by cluster "
                         "relation for addr %s" %
-                        (unit, hostname, private_address))
+                        (unit, hostname, private_address), level=DEBUG)
                     continue
                 else:
                     log("(unit=%s) hostname '%s' provided by cluster relation "
-                        "for addr %s" % (unit, hostname, private_address))
+                        "for addr %s" % (unit, hostname, private_address),
+                        level=DEBUG)
 
                 hosts_map[private_address] = hostname
                 hosts.append(hostname)
