@@ -190,7 +190,7 @@ def update_hosts_file(map):
             if len(line) < 2 or not (_line[0] == ip or hostname in _line[1:]):
                 keepers.append(line)
             else:
-                log("Marking line '%s' for update or removal" % (line),
+                log("Marking line '%s' for update or removal" % (line.strip()),
                     level=DEBUG)
 
         lines = keepers
