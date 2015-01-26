@@ -175,8 +175,8 @@ def update_hosts_file(map):
     with open(HOSTS_FILE, 'r') as hosts:
         lines = hosts.readlines()
 
-    log("Updating hosts file with: %s (current: %s)" % (map, lines),
-        level=INFO)
+    log("Updating %s with: %s (current: %s)" % (HOSTS_FILE, map, lines),
+        level=DEBUG)
 
     newlines = []
     for ip, hostname in map.items():
@@ -189,7 +189,8 @@ def update_hosts_file(map):
             if len(line) < 2 or not (_line[0] == ip or hostname in _line[1:]):
                 keepers.append(line)
             else:
-                log("Removing line '%s' from hosts file" % (line))
+                log("Marking line '%s' for update or removal" % (line),
+                    level=DEBUG)
 
         lines = keepers
         newlines.append("%s %s\n" % (ip, hostname))
