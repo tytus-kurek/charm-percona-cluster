@@ -350,7 +350,7 @@ def get_allowed_units(database, username, relation_id=None):
             except ValueError:
                 hosts = [hosts]
         else:
-            hosts = settings['private-address']
+            hosts = [settings['private-address']]
 
         if hosts:
             for host in hosts:
