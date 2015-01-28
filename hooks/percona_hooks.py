@@ -339,10 +339,10 @@ def shared_db_changed(relation_id=None, unit=None):
 
                 a_units = get_allowed_units(database, username,
                                             relation_id=relation_id)
-                a_units = " ".join(unit_sorted(a_units))
-                allowed_units['%s_%s' % (db, 'allowed_units')] = a_units
+                a_units = ' '.join(unit_sorted(a_units))
+                allowed_units['%s_allowed_units' % (db)] = a_units
 
-                return_data['%s_%s' % (db, 'password')] = password
+                return_data['%s_password' % (db)] = password
                 db_host = get_db_host(hostname)
 
         if allowed_units:
