@@ -11,11 +11,11 @@ from string import upper
 from charmhelpers.core.host import pwgen, mkdir, write_file
 from charmhelpers.core.hookenv import (
     relation_get,
-    relation_ids,
     related_units,
     service_name,
     unit_get,
     log,
+    DEBUG,
     INFO,
 )
 from charmhelpers.core.hookenv import config as config_get
@@ -331,36 +331,38 @@ def parse_config():
     return mysql_config
 
 
-def get_allowed_units(database, username):
+def get_allowed_units(database, username, relation_id=None):
     m_helper = MySQLHelper()
     m_helper.connect(password=get_mysql_root_password())
     allowed_units = set()
-    for relid in relation_ids('shared-db'):
-        for unit in related_units(relid):
-            hosts = relation_get(attribute="%s_%s" % (database, 'hostname'),
-                                 unit=unit, rid=relid)
-            if not hosts:
-                hosts = [relation_get(attribute='private-address', unit=unit,
-                                      rid=relid)]
-            else:
-                # hostname can be json-encoded list of hostnames
-                try:
-                    _hosts = json.loads(hosts)
-                except ValueError:
-                    pass
-                else:
-                    hosts = _hosts
-
-            if not isinstance(hosts, list):
-                hosts = [hosts]
-
+    for unit in related_units(relation_id):
+        settings = relation_get(rid=relation_id, unit=unit)
+        # First check for setting with prefix, then without
+        for attr in ["%s_hostname" % (database), 'hostname']:
+            hosts = settings.get(attr, None)
             if hosts:
-                for host in hosts:
-                    log("Checking host '%s' grant" % (host), level=INFO)
-                    if m_helper.grant_exists(database, username, host):
-                        if unit not in allowed_units:
-                            allowed_units.add(unit)
-            else:
-                log("No hosts found for grant check", level=INFO)
+                break
+
+        if hosts:
+            # hostname can be json-encoded list of hostnames
+            try:
+                hosts = json.loads(hosts)
+            except ValueError:
+                hosts = [hosts]
+        else:
+            hosts = [settings['private-address']]
+
+        if hosts:
+            for host in hosts:
+                if m_helper.grant_exists(database, username, host):
+                    log("Grant exists for host '%s' on db '%s'" %
+                        (host, database), level=DEBUG)
+                    if unit not in allowed_units:
+                        allowed_units.add(unit)
+                else:
+                    log("Grant does NOT exist for host '%s' on db '%s'" %
+                        (host, database), level=DEBUG)
+        else:
+            log("No hosts found for grant check", level=INFO)
 
     return allowed_units
