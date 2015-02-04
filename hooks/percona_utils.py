@@ -16,7 +16,7 @@ from charmhelpers.core.hookenv import (
     local_unit,
     config,
     log,
-    INFO
+    DEBUG,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -104,11 +104,12 @@ def get_cluster_hosts():
                 if not hostname or hostname in hosts:
                     log("(unit=%s) Ignoring hostname '%s' provided by cluster "
                         "relation for addr %s" %
-                        (unit, hostname, private_address))
+                        (unit, hostname, private_address), level=DEBUG)
                     continue
                 else:
                     log("(unit=%s) hostname '%s' provided by cluster relation "
-                        "for addr %s" % (unit, hostname, private_address))
+                        "for addr %s" % (unit, hostname, private_address),
+                        level=DEBUG)
 
                 hosts_map[private_address] = hostname
                 hosts.append(hostname)
@@ -175,8 +176,8 @@ def update_hosts_file(map):
     with open(HOSTS_FILE, 'r') as hosts:
         lines = hosts.readlines()
 
-    log("Updating hosts file with: %s (current: %s)" % (map, lines),
-        level=INFO)
+    log("Updating %s with: %s (current: %s)" % (HOSTS_FILE, map, lines),
+        level=DEBUG)
 
     newlines = []
     for ip, hostname in map.items():
@@ -189,7 +190,8 @@ def update_hosts_file(map):
             if len(line) < 2 or not (_line[0] == ip or hostname in _line[1:]):
                 keepers.append(line)
             else:
-                log("Removing line '%s' from hosts file" % (line))
+                log("Marking line '%s' for update or removal" % (line.strip()),
+                    level=DEBUG)
 
         lines = keepers
         newlines.append("%s %s\n" % (ip, hostname))

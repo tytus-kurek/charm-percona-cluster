@@ -18,12 +18,12 @@ from charmhelpers.core.hookenv import (
     config,
     remote_unit,
     relation_type,
+    DEBUG,
     INFO,
 )
 from charmhelpers.core.host import (
     service_restart,
     file_hash,
-    write_file,
     lsb_release,
 )
 from charmhelpers.core.templating import render
@@ -231,6 +231,23 @@ def get_db_host(client_hostname):
     return unit_get('private-address')
 
 
+def configure_db_for_hosts(hosts, database, username):
+    """Hosts may be a json-encoded list of hosts or a single hostname."""
+    try:
+        hosts = json.loads(hosts)
+        log("Multiple hostnames provided by relation: %s" % (', '.join(hosts)),
+            level=DEBUG)
+    except ValueError:
+        log("Single hostname provided by relation: %s" % (hosts),
+            level=DEBUG)
+        hosts = [hosts]
+
+    for host in hosts:
+        password = configure_db(host, database, username)
+
+    return password
+
+
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
@@ -270,25 +287,18 @@ def shared_db_changed(relation_id=None, unit=None):
         database = settings['database']
         username = settings['username']
 
-        # Hostname can be json-encoded list of hostnames
-        try:
-            hostname = json.loads(hostname)
-        except ValueError:
-            pass
+        # NOTE: do this before querying access grants
+        password = configure_db_for_hosts(hostname, database, username)
 
-        if isinstance(hostname, list):
-            for host in hostname:
-                password = configure_db(host, database, username)
-        else:
-            password = configure_db(hostname, database, username)
-
-        allowed_units = unit_sorted(get_allowed_units(database, username))
+        allowed_units = unit_sorted(get_allowed_units(database, username,
+                                                      relation_id=relation_id))
         allowed_units = ' '.join(allowed_units)
+        relation_set(relation_id=relation_id, allowed_units=allowed_units)
+
         db_host = get_db_host(hostname)
         peer_store_and_set(relation_id=relation_id,
                            db_host=db_host,
-                           password=password,
-                           allowed_units=allowed_units)
+                           password=password)
     else:
         # Process multiple database setup requests.
         # from incoming relation data:
@@ -316,34 +326,36 @@ def shared_db_changed(relation_id=None, unit=None):
                 databases[db] = {}
             databases[db][x] = v
 
+        allowed_units = {}
         return_data = {}
         for db in databases:
             if singleset.issubset(databases[db]):
                 database = databases[db]['database']
                 hostname = databases[db]['hostname']
                 username = databases[db]['username']
-                try:
-                    hostname = json.loads(hostname)
-                except ValueError:
-                    pass
 
-                if isinstance(hostname, list):
-                    for host in hostname:
-                        password = configure_db(host, database, username)
-                else:
-                    password = configure_db(hostname, database, username)
+                # NOTE: do this before querying access grants
+                password = configure_db_for_hosts(hostname, database, username)
 
-                return_data['_'.join([db, 'password'])] = password
-                return_data['_'.join([db, 'allowed_units'])] = \
-                    " ".join(unit_sorted(get_allowed_units(database,
-                                                           username)))
+                a_units = get_allowed_units(database, username,
+                                            relation_id=relation_id)
+                a_units = ' '.join(unit_sorted(a_units))
+                allowed_units['%s_allowed_units' % (db)] = a_units
+
+                return_data['%s_password' % (db)] = password
                 db_host = get_db_host(hostname)
 
-        if len(return_data) > 0:
-            peer_store_and_set(relation_id=relation_id,
+        if allowed_units:
+            relation_set(relation_id=relation_id, **allowed_units)
+        else:
+            log("No allowed_units - not setting relation settings",
+                level=DEBUG)
+
+        if return_data:
+            peer_store_and_set(relation_id=relation_id, db_host=db_host,
                                **return_data)
-            peer_store_and_set(relation_id=relation_id,
-                               db_host=db_host)
+        else:
+            log("No return data - not setting relation settings", level=DEBUG)
 
     peer_store_and_set(relation_id=relation_id,
                        relation_settings={'access-network': access_network})
