@@ -55,6 +55,7 @@ from charmhelpers.contrib.database.mysql import (
     get_mysql_password,
     get_mysql_root_password,
     parse_config,
+    configure_db,
 )
 from charmhelpers.contrib.hahelpers.cluster import (
     peer_units,
@@ -63,7 +64,6 @@ from charmhelpers.contrib.hahelpers.cluster import (
     is_clustered,
     is_leader,
 )
-from mysql import configure_db
 from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
