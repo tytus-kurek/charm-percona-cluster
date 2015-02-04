@@ -25,7 +25,10 @@ from charmhelpers.fetch import (
 from charmhelpers.contrib.network.ip import (
     get_ipv6_addr
 )
-from mysql import get_mysql_root_password, MySQLHelper
+from charmhelpers.contrib.database.mysql import (
+    get_mysql_root_password,
+    MySQLHelper,
+)
 
 
 PACKAGES = [
