@@ -1,5 +1,4 @@
-''' Helper for working with a MySQL database '''
-# TODO: Contribute to charm-helpers
+"""Helper for working with a MySQL database"""
 import json
 import socket
 import re
@@ -7,8 +6,14 @@ import sys
 import platform
 import os
 import glob
+
 from string import upper
-from charmhelpers.core.host import pwgen, mkdir, write_file
+
+from charmhelpers.core.host import (
+    mkdir,
+    pwgen,
+    write_file
+)
 from charmhelpers.core.hookenv import (
     relation_get,
     related_units,
@@ -24,17 +29,16 @@ from charmhelpers.fetch import (
     apt_update,
     filter_installed_packages,
 )
-
 from charmhelpers.contrib.peerstorage import (
     peer_store,
     peer_retrieve,
 )
+
 try:
     import MySQLdb
 except ImportError:
     apt_update(fatal=True)
-    apt_install(filter_installed_packages(['python-mysqldb']),
-                fatal=True)
+    apt_install(filter_installed_packages(['python-mysqldb']), fatal=True)
     import MySQLdb
 
 
@@ -54,6 +58,7 @@ class MySQLHelper():
             databases = [i[0] for i in cursor.fetchall()]
         finally:
             cursor.close()
+
         return db_name in databases
 
     def create_database(self, db_name):
@@ -76,11 +81,11 @@ class MySQLHelper():
             return False
         finally:
             cursor.close()
+
         # TODO: review for different grants
         return priv_string in grants
 
-    def create_grant(self, db_name, db_user,
-                     remote_ip, password):
+    def create_grant(self, db_name, db_user, remote_ip, password):
         cursor = self.connection.cursor()
         try:
             # TODO: review for different grants
@@ -92,8 +97,7 @@ class MySQLHelper():
         finally:
             cursor.close()
 
-    def create_admin_grant(self, db_user,
-                           remote_ip, password):
+    def create_admin_grant(self, db_user, remote_ip, password):
         cursor = self.connection.cursor()
         try:
             cursor.execute("GRANT ALL PRIVILEGES ON *.* TO '{}'@'{}' "
@@ -103,8 +107,7 @@ class MySQLHelper():
         finally:
             cursor.close()
 
-    def cleanup_grant(self, db_user,
-                      remote_ip):
+    def cleanup_grant(self, db_user, remote_ip):
         cursor = self.connection.cursor()
         try:
             cursor.execute("DROP FROM mysql.user WHERE user='{}' "
@@ -114,46 +117,48 @@ class MySQLHelper():
             cursor.close()
 
     def execute(self, sql):
-        ''' Execute arbitary SQL against the database '''
+        """Execute arbitary SQL against the database."""
         cursor = self.connection.cursor()
         try:
             cursor.execute(sql)
         finally:
             cursor.close()
 
-
+# These are percona-only since mysql charm uses /var/lib/mysql/...
 _root_passwd = '/var/lib/charm/{}/mysql.passwd'
 _named_passwd = '/var/lib/charm/{}/mysql-{}.passwd'
 
 
-def get_mysql_password_on_disk(username=None, password=None):
-    ''' Retrieve, generate or store a mysql password for
-        the provided username on disk'''
-    if username:
-        _passwd_file = _named_passwd.format(service_name(),
-                                            username)
-    else:
-        _passwd_file = _root_passwd.format(service_name())
+def get_mysql_password_on_disk(username=None, password=None, passwd_file=None):
+    """Retrieve, generate or store a mysql password for the provided username
+    on disk."""
+    if not passwd_file:
+        if username:
+            passwd_file = _named_passwd.format(service_name(), username)
+        else:
+            passwd_file = _root_passwd.format(service_name())
+
     _password = None
-    if os.path.exists(_passwd_file):
-        with open(_passwd_file, 'r') as passwd:
+    if os.path.exists(passwd_file):
+        with open(passwd_file, 'r') as passwd:
             _password = passwd.read().strip()
     else:
-        mkdir(os.path.dirname(_passwd_file),
+        mkdir(os.path.dirname(passwd_file),
               owner='root', group='root',
               perms=0o770)
         # Force permissions - for some reason the chmod in makedirs fails
-        os.chmod(os.path.dirname(_passwd_file), 0o770)
+        os.chmod(os.path.dirname(passwd_file), 0o770)
         _password = password or pwgen(length=32)
-        write_file(_passwd_file, _password,
+        write_file(passwd_file, _password,
                    owner='root', group='root',
                    perms=0o660)
+
     return _password
 
 
-def get_mysql_password(username=None, password=None):
-    ''' Retrieve, generate or store a mysql password for
-        the provided username using peer relation cluster '''
+def get_mysql_password(username=None, password=None, passwd_file=None):
+    """Retrieve, generate or store a mysql password for the provided username
+    using peer relation cluster."""
     migrate_passwords_to_peer_relation()
     if username:
         _key = '{}.passwd'.format(username)
@@ -167,12 +172,14 @@ def get_mysql_password(username=None, password=None):
             peer_store(_key, _password)
     except ValueError:
         # cluster relation is not yet started; use on-disk
-        _password = get_mysql_password_on_disk(username, password)
+        _password = get_mysql_password_on_disk(username, password,
+                                               passwd_file=passwd_file)
+
     return _password
 
 
 def migrate_passwords_to_peer_relation():
-    ''' Migrate any passwords storage on disk to cluster peer relation '''
+    """Migrate any passwords storage on disk to cluster peer relation."""
     for f in glob.glob('/var/lib/charm/{}/*.passwd'.format(service_name())):
         _key = os.path.basename(f)
         with open(f, 'r') as passwd:
@@ -185,39 +192,39 @@ def migrate_passwords_to_peer_relation():
             pass
 
 
-def get_mysql_root_password(password=None):
-    ''' Retrieve or generate mysql root password for service units '''
-    return get_mysql_password(username=None, password=password)
+def get_mysql_root_password(password=None, passwd_file=None):
+    """Retrieve or generate mysql root password for service units."""
+    return get_mysql_password(username=None, password=password,
+                              passwd_file=passwd_file)
 
 
-def configure_db(hostname,
-                 database,
-                 username,
-                 admin=False):
-    ''' Configure access to database for username from hostname '''
-
+def configure_db(hostname, database, username, admin=False, passwd_file=None):
+    """Configure access to database for username from hostname."""
     if config_get('prefer-ipv6'):
         remote_ip = hostname
     elif hostname != unit_get('private-address'):
-        remote_ip = socket.gethostbyname(hostname)
+        try:
+            remote_ip = socket.gethostbyname(hostname)
+        except Exception:
+            # socket.gethostbyname doesn't support ipv6
+            remote_ip = hostname
     else:
         remote_ip = '127.0.0.1'
 
-    password = get_mysql_password(username)
+    password = get_mysql_password(username, passwd_file=passwd_file)
     m_helper = MySQLHelper()
     m_helper.connect(password=get_mysql_root_password())
     if not m_helper.database_exists(database):
         m_helper.create_database(database)
+
     if not m_helper.grant_exists(database,
                                  username,
                                  remote_ip):
         if not admin:
-            m_helper.create_grant(database,
-                                  username,
-                                  remote_ip, password)
+            m_helper.create_grant(database, username, remote_ip, password)
         else:
-            m_helper.create_admin_grant(username,
-                                        remote_ip, password)
+            m_helper.create_admin_grant(username, remote_ip, password)
+
     return password
 
 # Going for the biggest page size to avoid wasted bytes. InnoDB page size is
@@ -226,10 +233,11 @@ DEFAULT_PAGE_SIZE = 16 * 1024 * 1024
 
 
 def human_to_bytes(human):
-    ''' Convert human readable configuration options to bytes '''
+    """Convert human readable configuration options to bytes."""
     num_re = re.compile('^[0-9]+$')
     if num_re.match(human):
         return human
+
     factors = {
         'K': 1024,
         'M': 1048576,
@@ -239,6 +247,7 @@ def human_to_bytes(human):
     modifier = human[-1]
     if modifier in factors:
         return int(human[:-1]) * factors[modifier]
+
     if modifier == '%':
         total_ram = human_to_bytes(get_mem_total())
         if is_32bit_system() and total_ram > sys_mem_limit():
@@ -246,40 +255,41 @@ def human_to_bytes(human):
         factor = int(human[:-1]) * 0.01
         pctram = total_ram * factor
         return int(pctram - (pctram % DEFAULT_PAGE_SIZE))
+
     raise ValueError("Can only convert K,M,G, or T")
 
 
 def is_32bit_system():
-    ''' Determine whether system is 32 or 64 bit '''
+    """Determine whether system is 32 or 64 bit."""
     try:
-        _is_32bit_system = sys.maxsize < 2 ** 32
+        return sys.maxsize < 2 ** 32
     except OverflowError:
-        _is_32bit_system = True
-    return _is_32bit_system
+        return False
 
 
 def sys_mem_limit():
-    ''' Determine the default memory limit for the current service unit '''
+    """Determine the default memory limit for the current service unit."""
     if platform.machine() in ['armv7l']:
         _mem_limit = human_to_bytes('2700M')  # experimentally determined
     else:
         # Limit for x86 based 32bit systems
         _mem_limit = human_to_bytes('4G')
+
     return _mem_limit
 
 
 def get_mem_total():
-    ''' Calculate the total memory in the current service unit '''
+    """Calculate the total memory in the current service unit."""
     with open('/proc/meminfo') as meminfo_file:
         for line in meminfo_file:
-            (key, mem) = line.split(':', 2)
+            key, mem = line.split(':', 2)
             if key == 'MemTotal':
-                (mtot, modifier) = mem.strip().split(' ')
+                mtot, modifier = mem.strip().split(' ')
                 return '%s%s' % (mtot, upper(modifier[0]))
 
 
 def parse_config():
-    ''' Parse charm configuration and calculate values for config files '''
+    """Parse charm configuration and calculate values for config files."""
     config = config_get()
     mysql_config = {}
     if 'max-connections' in config:
@@ -300,6 +310,7 @@ def parse_config():
                                (qcache_bytes % DEFAULT_PAGE_SIZE))
             mysql_config['query_cache_size'] = qcache_bytes
             dataset_bytes -= qcache_bytes
+
         # 5.5 allows the words, but not 5.1
         if config['query-cache-type'] == 'ON':
             mysql_config['query_cache_type'] = 1
@@ -323,17 +334,25 @@ def parse_config():
                 mysql_config['innodb_flush_log_at_trx_commit'] = 2
         else:
             mysql_config['innodb_buffer_pool_size'] = 0
+
         mysql_config['default_storage_engine'] = preferred_engines[0]
         if 'MyISAM' in preferred_engines:
             mysql_config['key_buffer'] = chunk_size
+
         if config['tuning-level'] == 'fast':
             mysql_config['sync_binlog'] = 0
+
     return mysql_config
 
 
-def get_allowed_units(database, username, relation_id=None):
+def get_allowed_units(database, username, db_root_password, relation_id=None):
+    """Get list of units with access grants for database with username.
+
+    This is typically used to provide shared-db relations with a list of which
+    units have been granted access to the given database.
+    """
     m_helper = MySQLHelper()
-    m_helper.connect(password=get_mysql_root_password())
+    m_helper.connect(password=db_root_password)
     allowed_units = set()
     for unit in related_units(relation_id):
         settings = relation_get(rid=relation_id, unit=unit)

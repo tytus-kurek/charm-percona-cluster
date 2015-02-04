@@ -50,9 +50,10 @@ from percona_utils import (
     assert_charm_supports_ipv6,
     unit_sorted,
 )
-from mysql import (
+from charmhelpers.contrib.database.mysql import (
     get_allowed_units,
     get_mysql_password,
+    get_mysql_root_password,
     parse_config,
 )
 from charmhelpers.contrib.hahelpers.cluster import (
@@ -279,6 +280,7 @@ def shared_db_changed(relation_id=None, unit=None):
             db_host = unit_get('private-address')
 
     access_network = config('access-network')
+    rpasswd = get_mysql_root_password()
 
     singleset = set(['database', 'username', 'hostname'])
     if singleset.issubset(settings):
@@ -290,8 +292,10 @@ def shared_db_changed(relation_id=None, unit=None):
         # NOTE: do this before querying access grants
         password = configure_db_for_hosts(hostname, database, username)
 
-        allowed_units = unit_sorted(get_allowed_units(database, username,
-                                                      relation_id=relation_id))
+        allowed_units = get_allowed_units(database, username,
+                                          relation_id=relation_id,
+                                          db_root_password=rpasswd)
+        allowed_units = unit_sorted(allowed_units)
         allowed_units = ' '.join(allowed_units)
         relation_set(relation_id=relation_id, allowed_units=allowed_units)
 
@@ -338,7 +342,8 @@ def shared_db_changed(relation_id=None, unit=None):
                 password = configure_db_for_hosts(hostname, database, username)
 
                 a_units = get_allowed_units(database, username,
-                                            relation_id=relation_id)
+                                            relation_id=relation_id,
+                                            db_root_password=rpasswd)
                 a_units = ' '.join(unit_sorted(a_units))
                 allowed_units['%s_allowed_units' % (db)] = a_units
 
