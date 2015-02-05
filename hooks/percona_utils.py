@@ -14,6 +14,7 @@ from charmhelpers.core.hookenv import (
     relation_get,
     relation_set,
     local_unit,
+    service_name,
     config,
     log,
     DEBUG,
@@ -133,8 +134,10 @@ SQL_SST_USER_SETUP_IPV6 = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT "
 
 
 def get_db_helper():
-    return MySQLHelper(rpasswdf_template='/var/lib/charm/{}/mysql.passwd',
-                       upasswdf_template='/var/lib/charm/{}/mysql-{}.passwd')
+    return MySQLHelper(rpasswdf_template='/var/lib/charm/%s/mysql.passwd' %
+                       (service_name()),
+                       upasswdf_template='/var/lib/charm/%s/mysql-{}.passwd' %
+                       (service_name()))
 
 
 def configure_sstuser(sst_password):
