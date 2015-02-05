@@ -49,13 +49,10 @@ from percona_utils import (
     relation_clear,
     assert_charm_supports_ipv6,
     unit_sorted,
+    get_db_helper,
 )
 from charmhelpers.contrib.database.mysql import (
-    get_allowed_units,
-    get_mysql_password,
-    get_mysql_root_password,
-    parse_config,
-    configure_db,
+    PerconaClusterHelper,
 )
 from charmhelpers.contrib.hahelpers.cluster import (
     peer_units,
@@ -87,8 +84,10 @@ def install():
         add_source(config('source'))
 
     configure_mysql_root_password(config('root-password'))
-    mysql_password = get_mysql_password(username='sstuser',
-                                        password=config('sst-password'))
+    db_helper = get_db_helper()
+    cfg_passwd = config('sst-password')
+    mysql_password = db_helper.get_mysql_password(username='sstuser',
+                                                  password=cfg_passwd)
     # Render base configuration (no cluster)
     render_config(mysql_password=mysql_password)
     apt_update(fatal=True)
@@ -101,8 +100,10 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         os.makedirs(os.path.dirname(MY_CNF))
 
     if not mysql_password:
-        mysql_password = get_mysql_password(username='sstuser',
-                                            password=config('sst-password'))
+        db_helper = get_db_helper()
+        cfg_passwd = config('sst-password')
+        mysql_password = db_helper.get_mysql_password(username='sstuser',
+                                                      password=cfg_passwd)
 
     context = {
         'cluster_name': 'juju_cluster',
@@ -123,7 +124,7 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
     else:
         context['ipv6'] = False
 
-    context.update(parse_config())
+    context.update(PerconaClusterHelper().parse_config())
     render(os.path.basename(MY_CNF), MY_CNF, context, perms=0o444)
 
 
@@ -202,23 +203,19 @@ def db_changed(relation_id=None, unit=None, admin=None):
 
     if admin not in [True, False]:
         admin = relation_type() == 'db-admin'
-    database_name, _ = remote_unit().split("/")
-    username = database_name
-    password = configure_db(relation_get('private-address',
-                                         unit=unit,
-                                         rid=relation_id),
-                            database_name,
-                            username,
-                            admin=admin)
+    db_name, _ = remote_unit().split("/")
+    username = db_name
+    db_helper = get_db_helper()
+    addr = relation_get('private-address', unit=unit, rid=relation_id)
+    password = db_helper.configure_db(addr, db_name, username, admin=admin)
 
     relation_set(relation_id=relation_id,
                  relation_settings={
                      'user': username,
                      'password': password,
                      'host': db_host,
-                     'database': database_name,
-                 }
-                 )
+                     'database': db_name,
+                 })
 
 
 def get_db_host(client_hostname):
@@ -232,7 +229,7 @@ def get_db_host(client_hostname):
     return unit_get('private-address')
 
 
-def configure_db_for_hosts(hosts, database, username):
+def configure_db_for_hosts(hosts, database, username, db_helper):
     """Hosts may be a json-encoded list of hosts or a single hostname."""
     try:
         hosts = json.loads(hosts)
@@ -244,7 +241,7 @@ def configure_db_for_hosts(hosts, database, username):
         hosts = [hosts]
 
     for host in hosts:
-        password = configure_db(host, database, username)
+        password = db_helper.configure_db(host, database, username)
 
     return password
 
@@ -280,7 +277,7 @@ def shared_db_changed(relation_id=None, unit=None):
             db_host = unit_get('private-address')
 
     access_network = config('access-network')
-    rpasswd = get_mysql_root_password()
+    db_helper = get_db_helper()
 
     singleset = set(['database', 'username', 'hostname'])
     if singleset.issubset(settings):
@@ -290,11 +287,11 @@ def shared_db_changed(relation_id=None, unit=None):
         username = settings['username']
 
         # NOTE: do this before querying access grants
-        password = configure_db_for_hosts(hostname, database, username)
+        password = configure_db_for_hosts(hostname, database, username,
+                                          db_helper)
 
-        allowed_units = get_allowed_units(database, username,
-                                          relation_id=relation_id,
-                                          db_root_password=rpasswd)
+        allowed_units = db_helper.get_allowed_units(database, username,
+                                                    relation_id=relation_id)
         allowed_units = unit_sorted(allowed_units)
         allowed_units = ' '.join(allowed_units)
         relation_set(relation_id=relation_id, allowed_units=allowed_units)
@@ -339,11 +336,11 @@ def shared_db_changed(relation_id=None, unit=None):
                 username = databases[db]['username']
 
                 # NOTE: do this before querying access grants
-                password = configure_db_for_hosts(hostname, database, username)
+                password = configure_db_for_hosts(hostname, database, username,
+                                                  db_helper)
 
-                a_units = get_allowed_units(database, username,
-                                            relation_id=relation_id,
-                                            db_root_password=rpasswd)
+                a_units = db_helper.get_allowed_units(database, username,
+                                                      relation_id=relation_id)
                 a_units = ' '.join(unit_sorted(a_units))
                 allowed_units['%s_allowed_units' % (db)] = a_units
 
