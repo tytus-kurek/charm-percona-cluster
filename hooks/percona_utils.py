@@ -26,7 +26,6 @@ from charmhelpers.contrib.network.ip import (
     get_ipv6_addr
 )
 from charmhelpers.contrib.database.mysql import (
-    get_mysql_root_password,
     MySQLHelper,
 )
 
@@ -133,9 +132,14 @@ SQL_SST_USER_SETUP_IPV6 = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT "
                            "BY '{}'")
 
 
+def get_db_helper():
+    return MySQLHelper(rpasswdf_template='/var/lib/charm/{}/mysql.passwd',
+                       upasswdf_template='/var/lib/charm/{}/mysql-{}.passwd')
+
+
 def configure_sstuser(sst_password):
-    m_helper = MySQLHelper()
-    m_helper.connect(password=get_mysql_root_password())
+    m_helper = get_db_helper()
+    m_helper.connect(password=m_helper.get_mysql_root_password())
     m_helper.execute(SQL_SST_USER_SETUP.format(sst_password))
     m_helper.execute(SQL_SST_USER_SETUP_IPV6.format(sst_password))
 
@@ -147,7 +151,8 @@ def configure_mysql_root_password(password):
     # Set both percona and mysql password options to cover
     # both upstream and distro packages.
     packages = ["percona-server-server", "mysql-server"]
-    root_pass = get_mysql_root_password(password)
+    m_helper = get_db_helper()
+    root_pass = m_helper.get_mysql_root_password(password)
     for package in packages:
         dconf.stdin.write("%s %s/root_password password %s\n" %
                           (package, package, root_pass))
