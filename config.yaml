@@ -60,3 +60,12 @@ options:
       order for this charm to function correctly, the privacy extension must be
       disabled and a non-temporary address must be configured/available on
       your network interface.
+  innodb-file-per-table:
+     type: boolean
+     default: True
+     description: | 
+       Turns on innodb_file_per_table option, which will make MySQL put each
+       InnoDB table into separate .idb file. Existing InnoDB tables will remain
+       in ibdata1 file - full dump/import is needed to get rid of large
+       ibdata1 file
+     
