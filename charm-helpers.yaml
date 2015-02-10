@@ -7,3 +7,4 @@ include:
     - contrib.peerstorage
     - payload.execd
     - contrib.network.ip
+    - contrib.database
