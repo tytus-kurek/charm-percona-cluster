@@ -61,11 +61,15 @@ options:
       disabled and a non-temporary address must be configured/available on
       your network interface.
   innodb-file-per-table:
-     type: boolean
-     default: True
-     description: | 
-       Turns on innodb_file_per_table option, which will make MySQL put each
-       InnoDB table into separate .idb file. Existing InnoDB tables will remain
-       in ibdata1 file - full dump/import is needed to get rid of large
-       ibdata1 file
-     
+    type: boolean
+    default: True
+    description: |
+      Turns on innodb_file_per_table option, which will make MySQL put each
+      InnoDB table into separate .idb file. Existing InnoDB tables will remain
+      in ibdata1 file - full dump/import is needed to get rid of large
+      ibdata1 file
+  lp1366997-workaround:
+    type: boolean
+    default: False
+    description: Adds two config options (wsrep_drupal_282555_workaround and wsrep_retry_autocommit) as a workaround for Percona Primary Key bug (see lplp1366997).
+
