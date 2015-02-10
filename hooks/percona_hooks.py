@@ -110,8 +110,11 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         'cluster_hosts': ",".join(hosts),
         'sst_method': 'xtrabackup',
         'sst_password': mysql_password,
-        'innodb_file_per_table': config('innodb-file-per-table')
+        'innodb_file_per_table': config('innodb-file-per-table'),
+        'lp1366997_workaround': config('lp1366997-workaround')
     }
+
+    print config
 
     if config('prefer-ipv6'):
         # NOTE(hopem): this is a kludge to get percona working with ipv6.
