@@ -111,7 +111,7 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         'sst_method': 'xtrabackup',
         'sst_password': mysql_password,
         'innodb_file_per_table': config('innodb-file-per-table'),
-        'retry_on_autocommit': config('retry-on-autocommit')
+        'lp1366997_workaround': config('lp1366997-workaround')
     }
 
     print config
