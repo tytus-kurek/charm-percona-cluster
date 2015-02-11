@@ -68,7 +68,7 @@ options:
       InnoDB table into separate .idb file. Existing InnoDB tables will remain
       in ibdata1 file - full dump/import is needed to get rid of large
       ibdata1 file
-  lp1366997-workaround:
+  retry-on-autocommit:
     type: boolean
     default: False
     description: Adds two config options (wsrep_drupal_282555_workaround and wsrep_retry_autocommit) as a workaround for Percona Primary Key bug (see lplp1366997).
