@@ -68,6 +68,11 @@ options:
       InnoDB table into separate .idb file. Existing InnoDB tables will remain
       in ibdata1 file - full dump/import is needed to get rid of large
       ibdata1 file
+  table-open-cache:
+    type: int
+    default: 2048
+    description:
+      Sets table_open_cache (formerly known as table_cache) to mysql.
   lp1366997-workaround:
     type: boolean
     default: False
