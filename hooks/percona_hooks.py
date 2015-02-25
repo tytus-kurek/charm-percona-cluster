@@ -69,6 +69,8 @@ from charmhelpers.contrib.network.ip import (
     is_address_in_network,
 )
 
+from charmhelpers.contrib.charmsupport import nrpe
+
 hooks = Hooks()
 
 LEADER_RES = 'grp_percona_cluster'
@@ -424,6 +426,23 @@ def ha_relation_changed():
             relation_clear(r_id)
         for r_id in relation_ids('db-admin'):
             relation_clear(r_id)
+
+
+@hooks.hook('nrpe-external-master-relation-joined',
+            'nrpe-external-master-relation-changed')
+def update_nrpe_config():
+    # python-dbus is used by check_upstart_job
+    apt_install('python-dbus')
+    hostname = nrpe.get_nagios_hostname()
+    current_unit = nrpe.get_nagios_unit_name()
+    nrpe_setup = nrpe.NRPE(hostname=hostname)
+    nrpe.add_init_service_checks(nrpe_setup, 'mysql', current_unit)
+    nrpe_setup.add_check(
+        shortname='mysql_proc',
+        description='Check MySQL process {%s}' % current_unit,
+        check_cmd='check_procs -c 1:1 -C mysqld'
+    )
+    nrpe_setup.write()
 
 
 def main():
