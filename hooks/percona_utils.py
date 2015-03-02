@@ -235,7 +235,7 @@ def unit_sorted(units):
 
 def install_mysql_ocf():
     dest_file = '/usr/lib/ocf/resource.d/percona/mysql'
-    src_file = os.path.join(charm_dir(), 'ofc/percona/mysql')
+    src_file = os.path.join(charm_dir(), 'ocf/percona/mysql')
 
     if not os.path.isdir(os.path.dirname(dest_file)):
         os.makedirs(os.path.dirname(dest_file))
