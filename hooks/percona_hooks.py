@@ -50,6 +50,7 @@ from percona_utils import (
     assert_charm_supports_ipv6,
     unit_sorted,
     get_db_helper,
+    install_mysql_ocf,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -72,6 +73,20 @@ from charmhelpers.contrib.network.ip import (
 hooks = Hooks()
 
 LEADER_RES = 'grp_percona_cluster'
+RES_MYSQL_PARAMS = ('params config="/etc/my.cnf" '
+                    'pid="/var/lib/mysql/mysqld.pid" '
+                    'socket="/var/run/mysqld/mysqld.sock" '
+                    'replication_user="sstuser" '
+                    'replication_passwd="%(sstpsswd)s" '
+                    'max_slave_lag="60" '
+                    'evict_outdated_slaves="false" '
+                    'binary="/usr/libexec/mysqld" '
+                    'op monitor interval="5s" role="Master" '
+                    'OCF_CHECK_LEVEL="1" '
+                    'op monitor interval="2s" role="Slave" '
+                    'OCF_CHECK_LEVEL="1" '
+                    'op start interval="0" timeout="60s" '
+                    'op stop interval="0" timeout="60s" ')
 
 
 @hooks.hook('install')
@@ -166,6 +181,8 @@ def cluster_joined(relation_id=None):
             level=INFO)
         relation_set(relation_id=relation_id,
                      relation_settings=relation_settings)
+
+    install_mysql_ocf()
 
 
 @hooks.hook('cluster-relation-departed')
@@ -387,8 +404,12 @@ def ha_relation_joined():
         vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
                      (vip, vip_cidr, vip_iface)
 
-    resources = {'res_mysql_vip': res_mysql_vip}
-    resource_params = {'res_mysql_vip': vip_params}
+    resources = {'res_mysql_vip': res_mysql_vip,
+                 'res_mysql': 'ocf:percona:mysql'}
+    db_helper = get_db_helper()
+    sstpsswd = db_helper.get_mysql_password(username='sstuser')
+    resource_params = {'res_mysql_vip': vip_params,
+                       'res_mysql': RES_MYSQL_PARAMS % {'sstpsswd': sstpsswd}}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     for rel_id in relation_ids('ha'):
