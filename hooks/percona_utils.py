@@ -4,6 +4,7 @@ from subprocess import Popen, PIPE
 import socket
 import tempfile
 import os
+import shutil
 from charmhelpers.core.host import (
     lsb_release
 )
@@ -229,3 +230,13 @@ def unit_sorted(units):
     """Return a sorted list of unit names."""
     return sorted(
         units, lambda a, b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
+
+
+def install_mysql_ocf():
+    dest_file = '/usr/lib/ocf/resource.d/percona/mysql'
+    src_file = 'ofc/percona/mysql'
+
+    if not os.path.isdir(os.path.dirname(dest_file)):
+        os.makedirs(os.path.dirname(dest_file))
+    if not os.path.exists(dest_file):
+        shutil.copy(src_file, dest_file)
