@@ -9,6 +9,7 @@ from charmhelpers.core.host import (
     lsb_release
 )
 from charmhelpers.core.hookenv import (
+    charm_dir,
     unit_get,
     relation_ids,
     related_units,
@@ -234,7 +235,7 @@ def unit_sorted(units):
 
 def install_mysql_ocf():
     dest_file = '/usr/lib/ocf/resource.d/percona/mysql'
-    src_file = 'ofc/percona/mysql'
+    src_file = os.path.join(charm_dir(), 'ofc/percona/mysql')
 
     if not os.path.isdir(os.path.dirname(dest_file)):
         os.makedirs(os.path.dirname(dest_file))
