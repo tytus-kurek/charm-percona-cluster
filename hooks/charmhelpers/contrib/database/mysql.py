@@ -1,6 +1,5 @@
 """Helper for working with a MySQL database"""
 import json
-import socket
 import re
 import sys
 import platform
@@ -22,7 +21,6 @@ from charmhelpers.core.hookenv import (
     log,
     DEBUG,
     INFO,
-    WARNING,
 )
 from charmhelpers.fetch import (
     apt_install,
