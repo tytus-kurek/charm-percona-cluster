@@ -114,7 +114,9 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         'cluster_hosts': ",".join(hosts),
         'sst_method': 'xtrabackup',
         'sst_password': mysql_password,
-        'innodb_file_per_table': config('innodb-file-per-table')
+        'innodb_file_per_table': config('innodb-file-per-table'),
+        'table_open_cache': config('table-open-cache'),
+        'lp1366997_workaround': config('lp1366997-workaround')
     }
 
     if config('prefer-ipv6'):
