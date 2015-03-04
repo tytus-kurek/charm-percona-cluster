@@ -1,6 +1,5 @@
 """Helper for working with a MySQL database"""
 import json
-import socket
 import re
 import sys
 import platform
@@ -22,7 +21,6 @@ from charmhelpers.core.hookenv import (
     log,
     DEBUG,
     INFO,
-    WARNING,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -358,6 +356,9 @@ class PerconaClusterHelper(object):
         mysql_config = {}
         if 'max-connections' in config:
             mysql_config['max_connections'] = config['max-connections']
+
+        if 'wait-timeout' in config:
+            mysql_config['wait_timeout'] = config['wait-timeout']
 
         # Set a sane default key_buffer size
         mysql_config['key_buffer'] = self.human_to_bytes('32M')
