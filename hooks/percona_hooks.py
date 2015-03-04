@@ -73,14 +73,11 @@ from charmhelpers.contrib.network.ip import (
 hooks = Hooks()
 
 LEADER_RES = 'grp_percona_cluster'
-RES_MYSQL_PARAMS = ('params config="/etc/my.cnf" '
-                    'pid="/var/lib/mysql/mysqld.pid" '
+RES_MYSQL_PARAMS = ('params config="/etc/mysql/my.cnf" '
+                    'pid="/var/run/mysqld/mysqld.pid" '
                     'socket="/var/run/mysqld/mysqld.sock" '
-                    'replication_user="sstuser" '
-                    'replication_passwd="%(sstpsswd)s" '
-                    'max_slave_lag="60" '
-                    'evict_outdated_slaves="false" '
-                    'binary="/usr/libexec/mysqld" '
+                    'max_slave_lag="60" '  # default is 3600
+                    'binary="/usr/sbin/mysqld" '
                     'op monitor interval="5s" role="Master" '
                     'OCF_CHECK_LEVEL="1" '
                     'op monitor interval="2s" role="Slave" '
@@ -405,12 +402,18 @@ def ha_relation_joined():
                      (vip, vip_cidr, vip_iface)
 
     resources = {'res_mysql_vip': res_mysql_vip,
-                 'res_mysql': 'ocf:percona:mysql'}
+                 'res_mysqld': 'ocf:percona:mysql'}
     db_helper = get_db_helper()
-    sstpsswd = db_helper.get_mysql_password(username='sstuser')
+    cfg_passwd = config('sst-password')
+    sstpsswd = db_helper.get_mysql_password(username='sstuser',
+                                            password=cfg_passwd)
     resource_params = {'res_mysql_vip': vip_params,
-                       'res_mysql': RES_MYSQL_PARAMS % {'sstpsswd': sstpsswd}}
+                       'res_mysqld': RES_MYSQL_PARAMS % {'sstpsswd': sstpsswd}}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
+
+    clones = {'cl_mysqld': 'res_mysqld meta interleave=true'}
+
+    colocations = {'vip_mysqld': 'inf: res_mysqld res_mysql_vip role=Master'}
 
     for rel_id in relation_ids('ha'):
         relation_set(relation_id=rel_id,
@@ -418,7 +421,9 @@ def ha_relation_joined():
                      corosync_mcastport=corosync_mcastport,
                      resources=resources,
                      resource_params=resource_params,
-                     groups=groups)
+                     groups=groups,
+                     clones=clones,
+                     colocations=colocations)
 
 
 @hooks.hook('ha-relation-changed')
