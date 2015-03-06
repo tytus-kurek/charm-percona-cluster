@@ -234,10 +234,15 @@ def unit_sorted(units):
 
 
 def install_mysql_ocf():
-    dest_file = '/usr/lib/ocf/resource.d/percona/mysql'
-    src_file = os.path.join(charm_dir(), 'ocf/percona/mysql')
+    dest_dir = '/usr/lib/ocf/resource.d/percona/'
+    for fname in ['ocf/percona/mysql', 'ocf/percona/mysql_monitor']:
+        src_file = os.path.join(charm_dir(), fname)
+        if not os.path.isdir(dest_dir):
+            os.makedirs(dest_dir)
 
-    if not os.path.isdir(os.path.dirname(dest_file)):
-        os.makedirs(os.path.dirname(dest_file))
-    if not os.path.exists(dest_file):
-        shutil.copy(src_file, dest_file)
+        dest_file = os.path.join(dest_dir, os.path.basename(src_file))
+        if not os.path.exists(dest_file):
+            log('Installing %s' % dest_file, level='INFO')
+            shutil.copy(src_file, dest_file)
+        else:
+            log("'%s' already exists, skipping" % dest_file, level='INFO')
