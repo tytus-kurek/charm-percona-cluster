@@ -73,17 +73,13 @@ from charmhelpers.contrib.network.ip import (
 hooks = Hooks()
 
 LEADER_RES = 'grp_percona_cluster'
-RES_MYSQL_PARAMS = ('params config="/etc/mysql/my.cnf" '
-                    'pid="/var/run/mysqld/mysqld.pid" '
-                    'socket="/var/run/mysqld/mysqld.sock" '
-                    'max_slave_lag="60" '  # default is 3600
-                    'binary="/usr/sbin/mysqld" '
-                    'op monitor interval="5s" role="Master" '
-                    'OCF_CHECK_LEVEL="1" '
-                    'op monitor interval="2s" role="Slave" '
-                    'OCF_CHECK_LEVEL="1" '
-                    'op start interval="0" timeout="60s" '
-                    'op stop interval="0" timeout="60s" ')
+RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
+                      'pid="/var/run/mysqld/mysqld.pid" '
+                      'socket="/var/run/mysqld/mysqld.sock" '
+                      'max_slave_lag="5" '
+                      'cluster_type="pxc" '
+                      'op monitor interval="1s" timeout="30s" '
+                      'OCF_CHECK_LEVEL="1"')
 
 
 @hooks.hook('install')
@@ -402,18 +398,22 @@ def ha_relation_joined():
                      (vip, vip_cidr, vip_iface)
 
     resources = {'res_mysql_vip': res_mysql_vip,
-                 'res_mysqld': 'ocf:percona:mysql'}
+                 'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
     db_helper = get_db_helper()
     cfg_passwd = config('sst-password')
     sstpsswd = db_helper.get_mysql_password(username='sstuser',
                                             password=cfg_passwd)
     resource_params = {'res_mysql_vip': vip_params,
-                       'res_mysqld': RES_MYSQL_PARAMS % {'sstpsswd': sstpsswd}}
+                       'res_mysql_monitor':
+                           RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
-    clones = {'cl_mysqld': 'res_mysqld meta interleave=true'}
+    clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
 
-    colocations = {'vip_mysqld': 'inf: res_mysqld res_mysql_vip role=Master'}
+    colocations = {'vip_mysqld': 'inf: grp_percona_cluster cl_mysql_monitor'}
+
+    locations = {'loc_percona_cluster':
+                 'grp_percona_cluster rule inf: writable eq 1'}
 
     for rel_id in relation_ids('ha'):
         relation_set(relation_id=rel_id,
@@ -423,7 +423,8 @@ def ha_relation_joined():
                      resource_params=resource_params,
                      groups=groups,
                      clones=clones,
-                     colocations=colocations)
+                     colocations=colocations,
+                     locations=locations)
 
 
 @hooks.hook('ha-relation-changed')
