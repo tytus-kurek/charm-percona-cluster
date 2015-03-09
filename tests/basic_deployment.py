@@ -30,7 +30,7 @@ class BasicDeployment(unittest.TestCase):
 
         self.d = amulet.Deployment(series="trusty")
         self.d.add('percona-cluster', units=self.units)
-        self.d.add('hacluster', charm='local:trusty/hacluster')
+        self.d.add('hacluster')
         self.d.relate('percona-cluster:ha', 'hacluster:ha')
 
         cfg_percona = {'sst-password': 'ubuntu',
