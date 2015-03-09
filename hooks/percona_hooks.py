@@ -52,6 +52,7 @@ from percona_utils import (
     assert_charm_supports_ipv6,
     unit_sorted,
     get_db_helper,
+    mark_seeded, seeded
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -59,6 +60,8 @@ from charmhelpers.contrib.database.mysql import (
 from charmhelpers.contrib.hahelpers.cluster import (
     is_elected_leader,
     is_clustered,
+    oldest_peer,
+    peer_units,
 )
 from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
@@ -141,17 +144,28 @@ def config_changed():
     pre_hash = file_hash(MY_CNF)
     render_config(clustered, hosts)
     if file_hash(MY_CNF) != pre_hash:
-        # NOTE(jamespage): don't restart the leader as this
-        # should be the source of initial syncs for pxc
-        if clustered and not is_leader():
-            # Bootstrap node into seeded cluster
-            service_restart('mysql')
-        # NOTE(jamespage): this should deal with full outages
-        # of PXC where all nodes have been shutdown.
-        if clustered and is_leader() and \
-                not service_running('mysql'):
-            service(service_name='mysql',
-                    action='bootstrap-pxc')
+        try:
+            # NOTE(jamespage): don't restart the leader as this
+            # should be the source of initial syncs for pxc
+            if clustered and not is_leader():
+                # Bootstrap node into seeded cluster
+                service_restart('mysql')
+            # NOTE(jamespage): this should deal with full outages
+            # of PXC where all nodes have been shutdown.
+            if clustered and is_leader() and \
+                    not service_running('mysql'):
+                service(service_name='mysql',
+                        action='bootstrap-pxc')
+        except NotImplementedError:
+            # NOTE(jamespage): fallback to legacy behaviour.
+            oldest = oldest_peer(peer_units())
+            if clustered and not oldest and not seeded():
+                # Bootstrap node into seeded cluster
+                service_restart('mysql')
+                mark_seeded()
+            elif not clustered:
+                # Restart with new configuration
+                service_restart('mysql')
     # Notify any changes to the access network
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
