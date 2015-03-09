@@ -20,9 +20,12 @@ from charmhelpers.core.hookenv import (
     relation_type,
     DEBUG,
     INFO,
+    is_leader,
 )
 from charmhelpers.core.host import (
     service_restart,
+    service_running,
+    service,
     file_hash,
     lsb_release,
 )
@@ -44,7 +47,6 @@ from percona_utils import (
     get_host_ip,
     get_cluster_hosts,
     configure_sstuser,
-    seeded, mark_seeded,
     configure_mysql_root_password,
     relation_clear,
     assert_charm_supports_ipv6,
@@ -55,11 +57,8 @@ from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
 )
 from charmhelpers.contrib.hahelpers.cluster import (
-    peer_units,
-    oldest_peer,
     is_elected_leader,
     is_clustered,
-    is_leader,
 )
 from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
@@ -142,14 +141,17 @@ def config_changed():
     pre_hash = file_hash(MY_CNF)
     render_config(clustered, hosts)
     if file_hash(MY_CNF) != pre_hash:
-        oldest = oldest_peer(peer_units())
-        if clustered and not oldest and not seeded():
+        # NOTE(jamespage): don't restart the leader as this
+        # should be the source of initial syncs for pxc
+        if clustered and not is_leader():
             # Bootstrap node into seeded cluster
             service_restart('mysql')
-            mark_seeded()
-        elif not clustered:
-            # Restart with new configuration
-            service_restart('mysql')
+        # NOTE(jamespage): this should deal with full outages
+        # of PXC where all nodes have been shutdown.
+        if clustered and is_leader() and \
+                not service_running('mysql'):
+            service(service_name='mysql',
+                    action='bootstrap-pxc')
     # Notify any changes to the access network
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
@@ -253,6 +255,7 @@ def configure_db_for_hosts(hosts, database, username, db_helper):
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
     if not is_elected_leader(LEADER_RES):
+        # NOTE(jamespage): relation level data candidate
         relation_clear(relation_id)
         # Each unit needs to set the db information otherwise if the unit
         # with the info dies the settings die with it Bug# 1355848
@@ -416,6 +419,7 @@ def ha_relation_changed():
             for unit in related_units(r_id):
                 db_changed(r_id, unit, admin=True)
     else:
+        # NOTE(jamespage): relation level data candidate
         # Clear any settings data for non-leader units
         log('Cluster configured, not leader, clearing relation data')
         for r_id in relation_ids('shared-db'):
