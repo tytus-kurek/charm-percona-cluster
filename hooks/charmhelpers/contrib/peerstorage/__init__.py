@@ -78,6 +78,7 @@ def relation_get(attribute=None, rid=None, unit=None):
 
 def peer_retrieve(key, relation_name='cluster'):
     """Retrieve a named key from peer relation `relation_name`."""
+    print(leader_get())
     cluster_rels = relation_ids(relation_name)
     if len(cluster_rels) > 0:
         cluster_rid = cluster_rels[0]
@@ -108,6 +109,7 @@ def peer_retrieve_by_prefix(prefix, relation_name='cluster', delimiter='_',
 
 def peer_store(key, value, relation_name='cluster'):
     """Store the key/value pair on the named peer relation `relation_name`."""
+    print(leader_get())
     cluster_rels = relation_ids(relation_name)
     if len(cluster_rels) > 0:
         cluster_rid = cluster_rels[0]
@@ -152,7 +154,7 @@ def peer_store_and_set(relation_id=None, peer_relation_name='cluster',
                         to the current relation.
     @param peer_store_fatal: Set to True, the function will raise an exception
                              should the peer sotrage not be avialable."""
-
+    print(leader_get())
     relation_settings = relation_settings if relation_settings else {}
     relation_set(relation_id=relation_id,
                  relation_settings=relation_settings,
