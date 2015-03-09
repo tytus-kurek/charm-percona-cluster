@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/bin/bash -x
 # The script installs amulet and other tools needed for the amulet tests.
 
 # Get the status of the amulet package, this returns 0 of package is installed.
@@ -7,7 +7,7 @@ if [ $? -ne 0 ]; then
   # Install the Amulet testing harness.
   sudo add-apt-repository -y ppa:juju/stable
   sudo apt-get update 
-  sudo apt-get install -y amulet juju-core charm-tools
+  sudo apt-get install -y -q amulet juju-core charm-tools
 fi
 
 
