@@ -21,8 +21,8 @@ class BasicDeployment(unittest.TestCase):
             self.vip = self.cfg.get('vip')
         else:
             amulet.raise_status(amulet.SKIP,
-                                ("please set ENV variable VIP "
-                                 "to run this test"))
+                                ("please set the vip in local.yaml "
+                                 "to run this test suite"))
 
     def run(self):
         # The number of seconds to wait for the environment to setup.
@@ -30,7 +30,7 @@ class BasicDeployment(unittest.TestCase):
 
         self.d = amulet.Deployment(series="trusty")
         self.d.add('percona-cluster', units=self.units)
-        self.d.add('hacluster')
+        self.d.add('hacluster', charm='local:trusty/hacluster')
         self.d.relate('percona-cluster:ha', 'hacluster:ha')
 
         cfg_percona = {'sst-password': 'ubuntu',
