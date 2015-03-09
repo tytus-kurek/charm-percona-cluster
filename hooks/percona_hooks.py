@@ -57,7 +57,7 @@ from charmhelpers.contrib.database.mysql import (
 from charmhelpers.contrib.hahelpers.cluster import (
     peer_units,
     oldest_peer,
-    eligible_leader,
+    is_elected_leader,
     is_clustered,
     is_leader,
 )
@@ -190,7 +190,7 @@ def cluster_changed():
 @hooks.hook('db-relation-changed')
 @hooks.hook('db-admin-relation-changed')
 def db_changed(relation_id=None, unit=None, admin=None):
-    if not eligible_leader(LEADER_RES):
+    if not is_elected_leader(LEADER_RES):
         log('Service is peered, clearing db relation'
             ' as this service unit is not the leader')
         relation_clear(relation_id)
@@ -252,7 +252,7 @@ def configure_db_for_hosts(hosts, database, username, db_helper):
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
-    if not eligible_leader(LEADER_RES):
+    if not is_elected_leader(LEADER_RES):
         relation_clear(relation_id)
         # Each unit needs to set the db information otherwise if the unit
         # with the info dies the settings die with it Bug# 1355848
