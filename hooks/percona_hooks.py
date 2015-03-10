@@ -20,6 +20,7 @@ from charmhelpers.core.hookenv import (
     relation_type,
     DEBUG,
     INFO,
+    ERROR,
     is_leader,
 )
 from charmhelpers.core.host import (
@@ -67,8 +68,10 @@ from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
     get_netmask_for_address,
+    get_iface_for_address,
     get_ipv6_addr,
     is_address_in_network,
+    is_ipv6,
 )
 
 hooks = Hooks()
@@ -147,15 +150,9 @@ def config_changed():
         try:
             # NOTE(jamespage): don't restart the leader as this
             # should be the source of initial syncs for pxc
-            if clustered and not is_leader():
+            if not is_leader():
                 # Bootstrap node into seeded cluster
                 service_restart('mysql')
-            # NOTE(jamespage): this should deal with full outages
-            # of PXC where all nodes have been shutdown.
-            if clustered and is_leader() and \
-                    not service_running('mysql'):
-                service(service_name='mysql',
-                        action='bootstrap-pxc')
         except NotImplementedError:
             # NOTE(jamespage): fallback to legacy behaviour.
             oldest = oldest_peer(peer_units())
@@ -166,6 +163,19 @@ def config_changed():
             elif not clustered:
                 # Restart with new configuration
                 service_restart('mysql')
+
+    try:
+        # NOTE(jamespage): this should deal with full outages
+        # of PXC where all nodes have been shutdown.
+        if is_leader() and not service_running('mysql'):
+            service(service_name='mysql',
+                    action='bootstrap-pxc')
+    except NotImplementedError:
+        log('Unable to automatically recover cluster, '
+            'please perform manual recovery',
+            level=ERROR)
+        raise
+
     # Notify any changes to the access network
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
@@ -191,13 +201,14 @@ def cluster_changed():
     # attention to those excluded by default in peer_echo().
     # TODO(dosaboy): extend peer_echo() to support providing exclusion list as
     #                well as inclusion list.
+    # NOTE(jamespage): deprecated - leader-election
     rdata = relation_get()
     inc_list = []
     for attr in rdata.iterkeys():
         if attr not in ['hostname', 'private-address', 'public-address']:
             inc_list.append(attr)
-
     peer_echo(includes=inc_list)
+    # NOTE(jamespage): deprecated - leader-election
 
     config_changed()
 
@@ -207,9 +218,7 @@ def cluster_changed():
 @hooks.hook('db-admin-relation-changed')
 def db_changed(relation_id=None, unit=None, admin=None):
     if not is_elected_leader(LEADER_RES):
-        log('Service is peered, clearing db relation'
-            ' as this service unit is not the leader')
-        relation_clear(relation_id)
+        log('Not leader of service, deferring db-changed to leader')
         return
 
     if is_clustered():
@@ -238,14 +247,21 @@ def db_changed(relation_id=None, unit=None, admin=None):
 
 
 def get_db_host(client_hostname):
+    vips = config('vip').split() if config('vip') else []
     client_ip = get_host_ip(client_hostname)
-    if is_clustered():
-        return config('vip')
     access_network = config('access-network')
     if (access_network is not None and
             is_address_in_network(access_network, client_ip)):
-        return get_address_in_network(access_network)
-    return unit_get('private-address')
+        if is_clustered():
+            for vip in vips:
+                if is_address_in_network(access_network, vip):
+                    return vip
+        else:
+            return get_address_in_network(access_network)
+    elif is_clustered():
+        return config('vip') # NOTE on private network
+    else:
+        return unit_get('private-address')
 
 
 def configure_db_for_hosts(hosts, database, username, db_helper):
@@ -384,29 +400,49 @@ def shared_db_changed(relation_id=None, unit=None):
 
 
 @hooks.hook('ha-relation-joined')
-def ha_relation_joined():
-    vip = config('vip')
-    vip_iface = config('vip_iface')
-    vip_cidr = config('vip_cidr')
-    corosync_bindiface = config('ha-bindiface')
-    corosync_mcastport = config('ha-mcastport')
-
-    if None in [vip, vip_cidr, vip_iface]:
+def ha_relation_joined(relation_id=None):
+    vips = config('vip')
+    if not vips:
         log('Insufficient VIP information to configure cluster')
         sys.exit(1)
 
-    if config('prefer-ipv6'):
-        res_mysql_vip = 'ocf:heartbeat:IPv6addr'
-        vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
-                     (vip, get_netmask_for_address(vip), vip_iface)
-    else:
-        res_mysql_vip = 'ocf:heartbeat:IPaddr2'
-        vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
-                     (vip, vip_cidr, vip_iface)
+    corosync_bindiface = config('ha-bindiface')
+    corosync_mcastport = config('ha-mcastport')
+    resources = {}
+    resource_params = {}
 
-    resources = {'res_mysql_vip': res_mysql_vip}
-    resource_params = {'res_mysql_vip': vip_params}
-    groups = {'grp_percona_cluster': 'res_mysql_vip'}
+    vip_group = []
+    for vip in vips.split():
+        if is_ipv6(vip):
+            res_ks_vip = 'ocf:heartbeat:IPv6addr'
+            vip_params = 'ipv6addr'
+        else:
+            res_ks_vip = 'ocf:heartbeat:IPaddr2'
+            vip_params = 'ip'
+
+        iface = (get_iface_for_address(vip) or
+                 config('vip_iface'))
+        netmask = (get_netmask_for_address(vip) or
+                   config('vip_cidr'))
+
+        if iface is not None:
+            vip_key = 'res_mysql_{}_vip'.format(iface)
+            resources[vip_key] = res_ks_vip
+            resource_params[vip_key] = (
+                'params {ip}="{vip}" cidr_netmask="{netmask}"'
+                ' nic="{iface}"'.format(ip=vip_params,
+                                        vip=vip,
+                                        iface=iface,
+                                        netmask=netmask)
+            )
+            vip_group.append(vip_key)
+
+    groups = None
+    if len(vip_group) >= 1:
+        groups = {'grp_percona_cluster': ' '.join(vip_group)}
+    else:
+        log('Unable to configure/detect VIP configuration information')
+        sys.exit(1)
 
     for rel_id in relation_ids('ha'):
         relation_set(relation_id=rel_id,
@@ -420,7 +456,7 @@ def ha_relation_joined():
 @hooks.hook('ha-relation-changed')
 def ha_relation_changed():
     clustered = relation_get('clustered')
-    if (clustered and is_leader(LEADER_RES)):
+    if (clustered and is_elected_leader(LEADER_RES)):
         log('Cluster configured, notifying other services')
         # Tell all related services to start using the VIP
         for r_id in relation_ids('shared-db'):
@@ -432,16 +468,6 @@ def ha_relation_changed():
         for r_id in relation_ids('db-admin'):
             for unit in related_units(r_id):
                 db_changed(r_id, unit, admin=True)
-    else:
-        # NOTE(jamespage): relation level data candidate
-        # Clear any settings data for non-leader units
-        log('Cluster configured, not leader, clearing relation data')
-        for r_id in relation_ids('shared-db'):
-            relation_clear(r_id)
-        for r_id in relation_ids('db'):
-            relation_clear(r_id)
-        for r_id in relation_ids('db-admin'):
-            relation_clear(r_id)
 
 
 def main():
