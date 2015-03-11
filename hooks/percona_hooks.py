@@ -89,26 +89,16 @@ def install():
         add_source(config('source'))
 
     configure_mysql_root_password(config('root-password'))
-    db_helper = get_db_helper()
-    cfg_passwd = config('sst-password')
-    mysql_password = db_helper.get_mysql_password(username='sstuser',
-                                                  password=cfg_passwd)
     # Render base configuration (no cluster)
-    render_config(mysql_password=mysql_password)
+    render_config()
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
-    configure_sstuser(mysql_password)
+    configure_sstuser(config('sst-password'))
 
 
-def render_config(clustered=False, hosts=[], mysql_password=None):
+def render_config(clustered=False, hosts=[]):
     if not os.path.exists(os.path.dirname(MY_CNF)):
         os.makedirs(os.path.dirname(MY_CNF))
-
-    if not mysql_password:
-        db_helper = get_db_helper()
-        cfg_passwd = config('sst-password')
-        mysql_password = db_helper.get_mysql_password(username='sstuser',
-                                                      password=cfg_passwd)
 
     context = {
         'cluster_name': 'juju_cluster',
@@ -116,7 +106,7 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
         'sst_method': 'xtrabackup',
-        'sst_password': mysql_password,
+        'sst_password': config('sst-password'),
         'innodb_file_per_table': config('innodb-file-per-table'),
         'table_open_cache': config('table-open-cache'),
         'lp1366997_workaround': config('lp1366997-workaround')
