@@ -261,7 +261,10 @@ def get_db_host(client_hostname):
     elif is_clustered():
         return config('vip') # NOTE on private network
     else:
-        return unit_get('private-address')
+        if config('prefer-ipv6'):
+            return get_ipv6_addr(exc_list=vips)[0]
+        else:
+            return unit_get('private-address')
 
 
 def configure_db_for_hosts(hosts, database, username, db_helper):
@@ -286,6 +289,8 @@ def configure_db_for_hosts(hosts, database, username, db_helper):
 def shared_db_changed(relation_id=None, unit=None):
     if not is_elected_leader(LEADER_RES):
         # NOTE(jamespage): relation level data candidate
+        log('Service is peered, clearing shared-db relation'
+            ' as this service unit is not the leader')
         relation_clear(relation_id)
         # Each unit needs to set the db information otherwise if the unit
         # with the info dies the settings die with it Bug# 1355848
@@ -298,9 +303,6 @@ def shared_db_changed(relation_id=None, unit=None):
                              if 'password' in key.lower()]
                 if len(passwords) > 0:
                     relation_set(relation_id=rel_id, **peerdb_settings)
-
-        log('Service is peered, clearing shared-db relation'
-            ' as this service unit is not the leader')
         return
 
     settings = relation_get(unit=unit, rid=relation_id)
