@@ -164,18 +164,6 @@ def config_changed():
                 # Restart with new configuration
                 service_restart('mysql')
 
-    try:
-        # NOTE(jamespage): this should deal with full outages
-        # of PXC where all nodes have been shutdown.
-        if is_leader() and not service_running('mysql'):
-            service(service_name='mysql',
-                    action='bootstrap-pxc')
-    except NotImplementedError:
-        log('Unable to automatically recover cluster, '
-            'please perform manual recovery',
-            level=ERROR)
-        raise
-
     # Notify any changes to the access network
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
