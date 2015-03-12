@@ -625,5 +625,5 @@ def leader_set(settings=None, **kwargs):
             cmd.append('{}='.format(k))
         else:
             cmd.append('{}={}'.format(k, v))
-
+    log("Calling with %s" % cmd, level=DEBUG)
     subprocess.check_call(cmd)
