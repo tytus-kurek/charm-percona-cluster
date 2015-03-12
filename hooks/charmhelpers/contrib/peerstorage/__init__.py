@@ -25,7 +25,6 @@ from charmhelpers.core.hookenv import (
     leader_get,
     leader_set,
     is_leader,
-    log
 )
 
 
@@ -65,7 +64,6 @@ def relation_set(relation_settings=None, relation_id=None, **kwargs):
         else:
             raise NotImplementedError
     except NotImplementedError:
-        log('relation_set: %s' % locals())
         return _relation_set(relation_id=relation_id,
                              relation_settings=relation_settings,
                              **kwargs)
