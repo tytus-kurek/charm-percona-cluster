@@ -20,13 +20,10 @@ from charmhelpers.core.hookenv import (
     relation_type,
     DEBUG,
     INFO,
-    ERROR,
     is_leader,
 )
 from charmhelpers.core.host import (
     service_restart,
-    service_running,
-    service,
     file_hash,
     lsb_release,
 )
@@ -448,6 +445,14 @@ def ha_relation_changed():
         for r_id in relation_ids('db-admin'):
             for unit in related_units(r_id):
                 db_changed(r_id, unit, admin=True)
+
+
+@hooks.hook('leader-settings-changed')
+def leader_settings_changed():
+    # Notify any changes to data in leader storage
+    for r_id in relation_ids('shared-db'):
+        for unit in related_units(r_id):
+            shared_db_changed(r_id, unit)
 
 
 def main():
