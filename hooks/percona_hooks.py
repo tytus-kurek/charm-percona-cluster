@@ -135,10 +135,13 @@ def config_changed():
     render_config(clustered, hosts)
     if file_hash(MY_CNF) != pre_hash:
         try:
-            # NOTE(jamespage): don't restart the leader as this
-            # should be the source of initial syncs for pxc
-            if not is_leader():
+            # NOTE(jamespage): try with leadership election
+            if clustered and not is_leader() and not seeded():
                 # Bootstrap node into seeded cluster
+                service_restart('mysql')
+                mark_seeded()
+            elif not clustered:
+                # Restart with new configuration
                 service_restart('mysql')
         except NotImplementedError:
             # NOTE(jamespage): fallback to legacy behaviour.
