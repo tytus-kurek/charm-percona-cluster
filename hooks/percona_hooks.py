@@ -164,6 +164,8 @@ def config_changed():
             shared_db_changed(r_id, unit)
 
     if relation_ids('ha'):
+        # (re)install pcmkr agent
+        install_mysql_ocf()
         # make sure all the HA resources are (re)created
         ha_relation_joined()
 
