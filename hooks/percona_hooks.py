@@ -163,9 +163,10 @@ def config_changed():
         for unit in related_units(r_id):
             shared_db_changed(r_id, unit)
 
+    # (re)install pcmkr agent
+    install_mysql_ocf()
+
     if relation_ids('ha'):
-        # (re)install pcmkr agent
-        install_mysql_ocf()
         # make sure all the HA resources are (re)created
         ha_relation_joined()
 
@@ -180,8 +181,6 @@ def cluster_joined(relation_id=None):
             level=INFO)
         relation_set(relation_id=relation_id,
                      relation_settings=relation_settings)
-
-    install_mysql_ocf()
 
 
 @hooks.hook('cluster-relation-departed')
