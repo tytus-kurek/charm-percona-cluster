@@ -237,7 +237,7 @@ def get_db_host(client_hostname):
         else:
             return get_address_in_network(access_network)
     elif is_clustered():
-        return config('vip') # NOTE on private network
+        return config('vip')  # NOTE on private network
     else:
         if config('prefer-ipv6'):
             return get_ipv6_addr(exc_list=vips)[0]
