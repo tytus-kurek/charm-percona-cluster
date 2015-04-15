@@ -9,9 +9,11 @@ lint:
 unit_test:
 	@$(PYTHON) /usr/bin/nosetests --nologcapture unit_tests
 
-functional_test:
+test:
 	@echo Starting amulet tests...
-	@juju test -v -p AMULET_HTTP_PROXY --timeout 900
+	#NOTE(beisner): can remove -v after bug 1320357 is fixed
+	#   https://bugs.launchpad.net/amulet/+bug/1320357
+	@juju test -v -p AMULET_HTTP_PROXY,AMULET_OS_VIP --timeout 900
 
 bin/charm_helpers_sync.py:
 	@mkdir -p bin
