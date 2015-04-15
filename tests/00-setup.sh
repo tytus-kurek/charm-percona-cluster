@@ -20,10 +20,10 @@ for pkg in $PACKAGES; do
 done
 
 
-if [ ! -f "$(dirname $0)/../local.yaml" ]; then
-  echo "To run these amulet tests a vip is needed, create a file called \
-local.yaml in the charm dir, this file must contain a 'vip', if you're \
-using the local provider with lxc you could use a free IP from the range \
-10.0.3.0/24"
-  exit 1
-fi
+#if [ ! -f "$(dirname $0)/../local.yaml" ]; then
+#  echo "To run these amulet tests a vip is needed, create a file called \
+#local.yaml in the charm dir, this file must contain a 'vip', if you're \
+#using the local provider with lxc you could use a free IP from the range \
+#10.0.3.0/24"
+#  exit 1
+#fi

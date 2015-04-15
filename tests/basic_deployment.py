@@ -12,8 +12,8 @@ class BasicDeployment(unittest.TestCase):
         self.vip = None
         if vip:
             self.vip = vip
-        elif 'VIP' in os.environ:
-            self.vip = os.environ.get('VIP')
+        elif 'AMULET_OS_VIP' in os.environ:
+            self.vip = os.environ.get('AMULET_OS_VIP')
         elif os.path.isfile('local.yaml'):
             with open('local.yaml', 'rb') as f:
                 self.cfg = yaml.safe_load(f.read())
@@ -21,8 +21,8 @@ class BasicDeployment(unittest.TestCase):
             self.vip = self.cfg.get('vip')
         else:
             amulet.raise_status(amulet.SKIP,
-                                ("please set the vip in local.yaml "
-                                 "to run this test suite"))
+                                ("please set the vip in local.yaml or env var "
+                                 "AMULET_OS_VIP to run this test suite"))
 
     def run(self):
         # The number of seconds to wait for the environment to setup.
@@ -30,7 +30,11 @@ class BasicDeployment(unittest.TestCase):
 
         self.d = amulet.Deployment(series="trusty")
         self.d.add('percona-cluster', units=self.units)
-        self.d.add('hacluster')
+
+        # NOTE(freyes): we use hacluster/next, because stable doesn't support
+        # location rules definition.
+        self.d.add('hacluster',
+                   charm='lp:~openstack-charmers/charms/trusty/hacluster/next')
         self.d.relate('percona-cluster:ha', 'hacluster:ha')
 
         cfg_percona = {'sst-password': 'ubuntu',
