@@ -3,6 +3,7 @@ import os
 import telnetlib
 import unittest
 import yaml
+from charmhelpers.contrib.amulet.deployment import AmuletDeployment
 
 
 class BasicDeployment(unittest.TestCase):
@@ -39,7 +40,7 @@ class BasicDeployment(unittest.TestCase):
 
         cfg_percona = {'sst-password': 'ubuntu',
                        'root-password': 't00r',
-                       'dataset-size': '128M',
+                       'dataset-size': '512M',
                        'vip': self.vip}
 
         cfg_ha = {'debug': True,
