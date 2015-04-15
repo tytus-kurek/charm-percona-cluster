@@ -3,6 +3,12 @@ options:
     type: string
     default:
     description: Package install location for Percona XtraDB Cluster (defaults to distro for >= 14.04)
+  key:
+    type: string
+    default:
+    description: |
+      Key ID to import to the apt keyring to support use with arbitary source
+      configuration from outside of Launchpad archives or PPA's.
   dataset-size:
     default: '80%'
     type: string
