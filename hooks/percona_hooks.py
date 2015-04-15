@@ -81,7 +81,7 @@ def install():
             lsb_release()['DISTRIB_CODENAME'] < 'trusty':
         setup_percona_repo()
     elif config('source') is not None:
-        add_source(config('source'))
+        add_source(config('source'), config('key'))
 
     configure_mysql_root_password(config('root-password'))
     db_helper = get_db_helper()
