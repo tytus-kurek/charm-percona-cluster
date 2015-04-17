@@ -1,13 +1,19 @@
 import amulet
 import os
+import time
 import telnetlib
 import unittest
 import yaml
-from charmhelpers.contrib.amulet.deployment import AmuletDeployment
+from charmhelpers.contrib.openstack.amulet.deployment import (
+    OpenStackAmuletDeployment
+)
 
 
-class BasicDeployment(unittest.TestCase):
-    def __init__(self, vip=None, units=1):
+class BasicDeployment(OpenStackAmuletDeployment):
+    def __init__(self, vip=None, units=1, series="trusty", openstack=None,
+                 source=None, stable=False):
+        super(BasicDeployment, self).__init__(series, openstack, source,
+                                              stable)
         self.units = units
         self.master_unit = None
         self.vip = None
@@ -25,19 +31,26 @@ class BasicDeployment(unittest.TestCase):
                                 ("please set the vip in local.yaml or env var "
                                  "AMULET_OS_VIP to run this test suite"))
 
-    def run(self):
-        # The number of seconds to wait for the environment to setup.
-        seconds = 1200
+    def _add_services(self):
+        """Add services
 
-        self.d = amulet.Deployment(series="trusty")
-        self.d.add('percona-cluster', units=self.units)
+           Add the services that we're testing, where percona-cluster is local,
+           and the rest of the service are from lp branches that are
+           compatible with the local charm (e.g. stable or next).
+           """
+        this_service = {'name': 'percona-cluster',
+                        'units': self.units}
+        other_services = [{'name': 'hacluster'}]
+        super(BasicDeployment, self)._add_services(this_service,
+                                                   other_services)
 
-        # NOTE(freyes): we use hacluster/next, because stable doesn't support
-        # location rules definition.
-        self.d.add('hacluster',
-                   charm='lp:~openstack-charmers/charms/trusty/hacluster/next')
-        self.d.relate('percona-cluster:ha', 'hacluster:ha')
+    def _add_relations(self):
+        """Add all of the relations for the services."""
+        relations = {'percona-cluster:ha': 'hacluster:ha'}
+        super(BasicDeployment, self)._add_relations(relations)
 
+    def _configure_services(self):
+        """Configure all of the services."""
         cfg_percona = {'sst-password': 'ubuntu',
                        'root-password': 't00r',
                        'dataset-size': '512M',
@@ -51,19 +64,25 @@ class BasicDeployment(unittest.TestCase):
                                    'y5RRk/wcHakTcWYMwm70upDGJEP00YT3xem3NQy27A'
                                    'C1w=')}
 
-        self.d.configure('percona-cluster', cfg_percona)
-        self.d.configure('hacluster', cfg_ha)
+        configs = {'percona-cluster': cfg_percona,
+                   'hacluster': cfg_ha}
+        super(BasicDeployment, self)._configure_services(configs)
 
-        try:
-            self.d.setup(timeout=seconds)
-            self.d.sentry.wait(seconds)
-        except amulet.helpers.TimeoutError:
-            message = 'The environment did not setup in %d seconds.' % seconds
-            amulet.raise_status(amulet.SKIP, msg=message)
-        except:
-            raise
+    def run(self):
+        # The number of seconds to wait for the environment to setup.
+        seconds = 1200
 
-        self.master_unit = self.find_master()
+        self._add_services()
+        self._add_relations()
+        self._configure_services()
+        self._deploy()
+
+        i = 0
+        while i < 30 and not self.master_unit:
+            self.master_unit = self.find_master()
+            i += 1
+            time.sleep(10)
+
         assert self.master_unit is not None, 'percona-cluster vip not found'
 
         output, code = self.master_unit.run('sudo crm_verify --live-check')
@@ -85,7 +104,8 @@ class BasicDeployment(unittest.TestCase):
                 continue
 
             # is the vip running here?
-            output, code = unit.run('sudo ip a | grep %s' % self.vip)
+            output, code = unit.run('sudo ip a | grep "inet %s/"' % self.vip)
+            print('---')
             print(unit_id)
             print(output)
             if code == 0:
