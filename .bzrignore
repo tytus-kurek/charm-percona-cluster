@@ -2,3 +2,6 @@ bin
 .coverage
 .pydevproject
 .project
+*.pyc
+*.pyo
+__pycache__
