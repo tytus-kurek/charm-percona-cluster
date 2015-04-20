@@ -50,6 +50,7 @@ from percona_utils import (
     assert_charm_supports_ipv6,
     unit_sorted,
     get_db_helper,
+    install_mysql_ocf,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -72,6 +73,13 @@ from charmhelpers.contrib.network.ip import (
 hooks = Hooks()
 
 LEADER_RES = 'grp_percona_cluster'
+RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
+                      'pid="/var/run/mysqld/mysqld.pid" '
+                      'socket="/var/run/mysqld/mysqld.sock" '
+                      'max_slave_lag="5" '
+                      'cluster_type="pxc" '
+                      'op monitor interval="1s" timeout="30s" '
+                      'OCF_CHECK_LEVEL="1"')
 
 
 @hooks.hook('install')
@@ -154,6 +162,13 @@ def config_changed():
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
             shared_db_changed(r_id, unit)
+
+    # (re)install pcmkr agent
+    install_mysql_ocf()
+
+    if relation_ids('ha'):
+        # make sure all the HA resources are (re)created
+        ha_relation_joined()
 
 
 @hooks.hook('cluster-relation-joined')
@@ -387,9 +402,23 @@ def ha_relation_joined():
         vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
                      (vip, vip_cidr, vip_iface)
 
-    resources = {'res_mysql_vip': res_mysql_vip}
-    resource_params = {'res_mysql_vip': vip_params}
+    resources = {'res_mysql_vip': res_mysql_vip,
+                 'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
+    db_helper = get_db_helper()
+    cfg_passwd = config('sst-password')
+    sstpsswd = db_helper.get_mysql_password(username='sstuser',
+                                            password=cfg_passwd)
+    resource_params = {'res_mysql_vip': vip_params,
+                       'res_mysql_monitor':
+                           RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
+
+    clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
+
+    colocations = {'vip_mysqld': 'inf: grp_percona_cluster cl_mysql_monitor'}
+
+    locations = {'loc_percona_cluster':
+                 'grp_percona_cluster rule inf: writable eq 1'}
 
     for rel_id in relation_ids('ha'):
         relation_set(relation_id=rel_id,
@@ -397,7 +426,10 @@ def ha_relation_joined():
                      corosync_mcastport=corosync_mcastport,
                      resources=resources,
                      resource_params=resource_params,
-                     groups=groups)
+                     groups=groups,
+                     clones=clones,
+                     colocations=colocations,
+                     locations=locations)
 
 
 @hooks.hook('ha-relation-changed')

@@ -4,10 +4,12 @@ from subprocess import Popen, PIPE
 import socket
 import tempfile
 import os
+import shutil
 from charmhelpers.core.host import (
     lsb_release
 )
 from charmhelpers.core.hookenv import (
+    charm_dir,
     unit_get,
     relation_ids,
     related_units,
@@ -229,3 +231,18 @@ def unit_sorted(units):
     """Return a sorted list of unit names."""
     return sorted(
         units, lambda a, b: cmp(int(a.split('/')[-1]), int(b.split('/')[-1])))
+
+
+def install_mysql_ocf():
+    dest_dir = '/usr/lib/ocf/resource.d/percona/'
+    for fname in ['ocf/percona/mysql_monitor']:
+        src_file = os.path.join(charm_dir(), fname)
+        if not os.path.isdir(dest_dir):
+            os.makedirs(dest_dir)
+
+        dest_file = os.path.join(dest_dir, os.path.basename(src_file))
+        if not os.path.exists(dest_file):
+            log('Installing %s' % dest_file, level='INFO')
+            shutil.copy(src_file, dest_file)
+        else:
+            log("'%s' already exists, skipping" % dest_file, level='INFO')
