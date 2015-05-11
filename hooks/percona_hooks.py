@@ -50,7 +50,8 @@ from percona_utils import (
     assert_charm_supports_ipv6,
     unit_sorted,
     get_db_helper,
-    mark_seeded, seeded
+    mark_seeded, seeded,
+    install_mysql_ocf,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -65,15 +66,22 @@ from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
     get_netmask_for_address,
-    get_iface_for_address,
     get_ipv6_addr,
     is_address_in_network,
-    is_ipv6,
 )
+
+from charmhelpers.contrib.charmsupport import nrpe
 
 hooks = Hooks()
 
 LEADER_RES = 'grp_percona_cluster'
+RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
+                      'pid="/var/run/mysqld/mysqld.pid" '
+                      'socket="/var/run/mysqld/mysqld.sock" '
+                      'max_slave_lag="5" '
+                      'cluster_type="pxc" '
+                      'op monitor interval="1s" timeout="30s" '
+                      'OCF_CHECK_LEVEL="1"')
 
 
 @hooks.hook('install')
@@ -83,7 +91,7 @@ def install():
             lsb_release()['DISTRIB_CODENAME'] < 'trusty':
         setup_percona_repo()
     elif config('source') is not None:
-        add_source(config('source'))
+        add_source(config('source'), config('key'))
 
     configure_mysql_root_password(config('root-password'))
     # Render base configuration (no cluster)
@@ -158,6 +166,13 @@ def config_changed():
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
             shared_db_changed(r_id, unit)
+
+    # (re)install pcmkr agent
+    install_mysql_ocf()
+
+    if relation_ids('ha'):
+        # make sure all the HA resources are (re)created
+        ha_relation_joined()
 
 
 @hooks.hook('cluster-relation-joined')
@@ -380,49 +395,43 @@ def shared_db_changed(relation_id=None, unit=None):
 
 
 @hooks.hook('ha-relation-joined')
-def ha_relation_joined(relation_id=None):
-    vips = config('vip')
-    if not vips:
+def ha_relation_joined():
+    vip = config('vip')
+    vip_iface = config('vip_iface')
+    vip_cidr = config('vip_cidr')
+    corosync_bindiface = config('ha-bindiface')
+    corosync_mcastport = config('ha-mcastport')
+
+    if None in [vip, vip_cidr, vip_iface]:
         log('Insufficient VIP information to configure cluster')
         sys.exit(1)
 
-    corosync_bindiface = config('ha-bindiface')
-    corosync_mcastport = config('ha-mcastport')
-    resources = {}
-    resource_params = {}
-
-    vip_group = []
-    for vip in vips.split():
-        if is_ipv6(vip):
-            res_ks_vip = 'ocf:heartbeat:IPv6addr'
-            vip_params = 'ipv6addr'
-        else:
-            res_ks_vip = 'ocf:heartbeat:IPaddr2'
-            vip_params = 'ip'
-
-        iface = (get_iface_for_address(vip) or
-                 config('vip_iface'))
-        netmask = (get_netmask_for_address(vip) or
-                   config('vip_cidr'))
-
-        if iface is not None:
-            vip_key = 'res_mysql_{}_vip'.format(iface)
-            resources[vip_key] = res_ks_vip
-            resource_params[vip_key] = (
-                'params {ip}="{vip}" cidr_netmask="{netmask}"'
-                ' nic="{iface}"'.format(ip=vip_params,
-                                        vip=vip,
-                                        iface=iface,
-                                        netmask=netmask)
-            )
-            vip_group.append(vip_key)
-
-    groups = None
-    if len(vip_group) >= 1:
-        groups = {'grp_percona_cluster': ' '.join(vip_group)}
+    if config('prefer-ipv6'):
+        res_mysql_vip = 'ocf:heartbeat:IPv6addr'
+        vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
+                     (vip, get_netmask_for_address(vip), vip_iface)
     else:
-        log('Unable to configure/detect VIP configuration information')
-        sys.exit(1)
+        res_mysql_vip = 'ocf:heartbeat:IPaddr2'
+        vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
+                     (vip, vip_cidr, vip_iface)
+
+    resources = {'res_mysql_vip': res_mysql_vip,
+                 'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
+    db_helper = get_db_helper()
+    cfg_passwd = config('sst-password')
+    sstpsswd = db_helper.get_mysql_password(username='sstuser',
+                                            password=cfg_passwd)
+    resource_params = {'res_mysql_vip': vip_params,
+                       'res_mysql_monitor':
+                           RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
+    groups = {'grp_percona_cluster': 'res_mysql_vip'}
+
+    clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
+
+    colocations = {'vip_mysqld': 'inf: grp_percona_cluster cl_mysql_monitor'}
+
+    locations = {'loc_percona_cluster':
+                 'grp_percona_cluster rule inf: writable eq 1'}
 
     for rel_id in relation_ids('ha'):
         relation_set(relation_id=rel_id,
@@ -430,7 +439,10 @@ def ha_relation_joined(relation_id=None):
                      corosync_mcastport=corosync_mcastport,
                      resources=resources,
                      resource_params=resource_params,
-                     groups=groups)
+                     groups=groups,
+                     clones=clones,
+                     colocations=colocations,
+                     locations=locations)
 
 
 @hooks.hook('ha-relation-changed')
@@ -456,6 +468,23 @@ def leader_settings_changed():
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
             shared_db_changed(r_id, unit)
+
+
+@hooks.hook('nrpe-external-master-relation-joined',
+            'nrpe-external-master-relation-changed')
+def update_nrpe_config():
+    # python-dbus is used by check_upstart_job
+    apt_install('python-dbus')
+    hostname = nrpe.get_nagios_hostname()
+    current_unit = nrpe.get_nagios_unit_name()
+    nrpe_setup = nrpe.NRPE(hostname=hostname)
+    nrpe.add_init_service_checks(nrpe_setup, 'mysql', current_unit)
+    nrpe_setup.add_check(
+        shortname='mysql_proc',
+        description='Check MySQL process {%s}' % current_unit,
+        check_cmd='check_procs -c 1:1 -C mysqld'
+    )
+    nrpe_setup.write()
 
 
 def main():
