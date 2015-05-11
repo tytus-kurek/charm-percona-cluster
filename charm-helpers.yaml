@@ -8,3 +8,4 @@ include:
     - payload.execd
     - contrib.network.ip
     - contrib.database
+    - contrib.charmsupport
