@@ -17,7 +17,7 @@
 import os
 import re
 import json
-from collections import Iterable, OrderedDict
+from collections import Iterable
 
 from charmhelpers.core import host
 from charmhelpers.core import hookenv
@@ -119,7 +119,7 @@ class ServiceManager(object):
         """
         self._ready_file = os.path.join(hookenv.charm_dir(), 'READY-SERVICES.json')
         self._ready = None
-        self.services = OrderedDict()
+        self.services = {}
         for service in services or []:
             service_name = service['service']
             self.services[service_name] = service
