@@ -58,7 +58,7 @@ from charmhelpers.contrib.database.mysql import (
 from charmhelpers.contrib.hahelpers.cluster import (
     peer_units,
     oldest_peer,
-    is_elected_leader,
+    eligible_leader,
     is_clustered,
     is_leader,
 )
@@ -94,7 +94,7 @@ def install():
         add_source(config('source'), config('key'))
 
     configure_mysql_root_password(config('root-password'))
-    db_helper = get_db_helper(migrate_passwd_to_peer_relation=False)
+    db_helper = get_db_helper()
     cfg_passwd = config('sst-password')
     mysql_password = db_helper.get_mysql_password(username='sstuser',
                                                   password=cfg_passwd)
@@ -110,7 +110,7 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         os.makedirs(os.path.dirname(MY_CNF))
 
     if not mysql_password:
-        db_helper = get_db_helper(migrate_passwd_to_peer_relation=False)
+        db_helper = get_db_helper()
         cfg_passwd = config('sst-password')
         mysql_password = db_helper.get_mysql_password(username='sstuser',
                                                       password=cfg_passwd)
@@ -151,15 +151,12 @@ def config_changed():
     clustered = len(hosts) > 1
     pre_hash = file_hash(MY_CNF)
     render_config(clustered, hosts)
-    db_helper = get_db_helper()
     if file_hash(MY_CNF) != pre_hash:
         oldest = oldest_peer(peer_units())
         if clustered and not oldest and not seeded():
             # Bootstrap node into seeded cluster
             service_restart('mysql')
             mark_seeded()
-            # Bootstrapping from existing cluster invalidates passwords
-            db_helper.wipe_disk_passwords()
         elif not clustered:
             # Restart with new configuration
             service_restart('mysql')
@@ -210,7 +207,7 @@ def cluster_changed():
 @hooks.hook('db-relation-changed')
 @hooks.hook('db-admin-relation-changed')
 def db_changed(relation_id=None, unit=None, admin=None):
-    if not is_elected_leader(LEADER_RES):
+    if not eligible_leader(LEADER_RES):
         log('Service is peered, clearing db relation'
             ' as this service unit is not the leader')
         relation_clear(relation_id)
@@ -272,7 +269,7 @@ def configure_db_for_hosts(hosts, database, username, db_helper):
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
-    if not is_elected_leader(LEADER_RES):
+    if not eligible_leader(LEADER_RES):
         relation_clear(relation_id)
         # Each unit needs to set the db information otherwise if the unit
         # with the info dies the settings die with it Bug# 1355848
@@ -409,17 +406,13 @@ def ha_relation_joined():
 
     resources = {'res_mysql_vip': res_mysql_vip,
                  'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
-    if is_elected_leader(LEADER_RES):
-        migrate_passwd=True
-    else:
-        migrate_passwd=False
-    db_helper = get_db_helper(migrate_passwd_to_peer_relation=migrate_passwd)
+    db_helper = get_db_helper()
     cfg_passwd = config('sst-password')
     sstpsswd = db_helper.get_mysql_password(username='sstuser',
                                             password=cfg_passwd)
     resource_params = {'res_mysql_vip': vip_params,
                        'res_mysql_monitor':
-                       RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
+                           RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
