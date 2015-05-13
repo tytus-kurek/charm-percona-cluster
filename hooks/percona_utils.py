@@ -135,11 +135,12 @@ SQL_SST_USER_SETUP_IPV6 = ("GRANT RELOAD, LOCK TABLES, REPLICATION CLIENT "
                            "BY '{}'")
 
 
-def get_db_helper():
+def get_db_helper(migrate_passwd_to_peer_relation=True):
     return MySQLHelper(rpasswdf_template='/var/lib/charm/%s/mysql.passwd' %
                        (service_name()),
                        upasswdf_template='/var/lib/charm/%s/mysql-{}.passwd' %
-                       (service_name()))
+                       (service_name()),
+                       migrate_passwd_to_peer_relation=migrate_passwd_to_peer_relation)
 
 
 def configure_sstuser(sst_password):
