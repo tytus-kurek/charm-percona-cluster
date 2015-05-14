@@ -74,7 +74,7 @@ from charmhelpers.contrib.charmsupport import nrpe
 
 hooks = Hooks()
 
-LEADER_RES = 'grp_percona_cluster'
+LEADER_RES = 'DC'
 RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
                       'pid="/var/run/mysqld/mysqld.pid" '
                       'socket="/var/run/mysqld/mysqld.sock" '
