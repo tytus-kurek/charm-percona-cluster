@@ -96,6 +96,7 @@ def is_clustered():
 
 
 def is_crm_dc():
+    log('Determining leadership with Current DC.', level=INFO)
     cmd = ['crm', 'status']
     try:
         status = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
@@ -109,7 +110,9 @@ def is_crm_dc():
             # Current DC: juju-lytrusty-machine-2 (168108163) - partition with quorum
             current_dc = line.split(':')[1].split()[0]
     if current_dc == get_unit_hostname():
+        log('I am the leader (according to Current DC).', level=INFO)
         return True
+    log('I am not the leader (according to Current DC).', level=INFO)
     return False
 
 
