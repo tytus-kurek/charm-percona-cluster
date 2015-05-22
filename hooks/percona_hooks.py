@@ -412,7 +412,7 @@ def ha_relation_joined():
                                             password=cfg_passwd)
     resource_params = {'res_mysql_vip': vip_params,
                        'res_mysql_monitor':
-                           RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
+                       RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
