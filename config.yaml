@@ -10,9 +10,9 @@ options:
       Key ID to import to the apt keyring to support use with arbitary source
       configuration from outside of Launchpad archives or PPA's.
   dataset-size:
-    default: '80%'
+    default:
     type: string
-    description: How much data do you want to keep in memory in the DB. This will be used to tune settings in the database server appropriately. Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes. If suffixed with %, one will get that percentage of RAM devoted to dataset.
+    description: (deprecated) How much data do you want to keep in memory in the DB. This will be used to tune settings in the database server appropriately. Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes. If suffixed with %, one will get that percentage of RAM devoted to dataset.
   max-connections:
     default: -1
     type: int
@@ -103,3 +103,11 @@ options:
     description: |
         A comma-separated list of nagios servicegroups.
         If left empty, the nagios_context will be used as the servicegroup
+  innodb-buffer-pool-size:
+    default:
+    type: string
+    description: |
+      By default this value will be set according to the 50% of system total memory
+      but also can be set to any specific value for the system.
+      Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes.
+      If suffixed with %, one will get that percentage of system total memory devoted.
