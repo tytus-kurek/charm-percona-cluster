@@ -60,6 +60,7 @@ from charmhelpers.contrib.hahelpers.cluster import (
     is_elected_leader,
     is_clustered,
     oldest_peer,
+    DC_RESOURCE_NAME,
     peer_units,
 )
 from charmhelpers.payload.execd import execd_preinstall
@@ -74,7 +75,6 @@ from charmhelpers.contrib.charmsupport import nrpe
 
 hooks = Hooks()
 
-LEADER_RES = 'grp_percona_cluster'
 RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
                       'pid="/var/run/mysqld/mysqld.pid" '
                       'socket="/var/run/mysqld/mysqld.sock" '
@@ -210,8 +210,10 @@ def cluster_changed():
 @hooks.hook('db-relation-changed')
 @hooks.hook('db-admin-relation-changed')
 def db_changed(relation_id=None, unit=None, admin=None):
-    if not is_elected_leader(LEADER_RES):
-        log('Not leader of service, deferring db-changed to leader')
+    if not is_elected_leader(DC_RESOURCE_NAME):
+        log('Service is peered, clearing db relation'
+            ' as this service unit is not the leader')
+        relation_clear(relation_id)
         return
 
     if is_clustered():
@@ -280,7 +282,7 @@ def configure_db_for_hosts(hosts, database, username, db_helper):
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
-    if not is_elected_leader(LEADER_RES):
+    if not is_elected_leader(DC_RESOURCE_NAME):
         # NOTE(jamespage): relation level data candidate
         log('Service is peered, clearing shared-db relation'
             ' as this service unit is not the leader')
@@ -423,7 +425,7 @@ def ha_relation_joined():
                                             password=cfg_passwd)
     resource_params = {'res_mysql_vip': vip_params,
                        'res_mysql_monitor':
-                           RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
+                       RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
     groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
     clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
@@ -448,7 +450,7 @@ def ha_relation_joined():
 @hooks.hook('ha-relation-changed')
 def ha_relation_changed():
     clustered = relation_get('clustered')
-    if (clustered and is_elected_leader(LEADER_RES)):
+    if (clustered and is_elected_leader(DC_RESOURCE_NAME)):
         log('Cluster configured, notifying other services')
         # Tell all related services to start using the VIP
         for r_id in relation_ids('shared-db'):
