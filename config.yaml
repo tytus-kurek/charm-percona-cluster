@@ -12,7 +12,7 @@ options:
   dataset-size:
     default:
     type: string
-    description: How much data do you want to keep in memory in the DB. This will be used to tune settings in the database server appropriately. Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes. If suffixed with %, one will get that percentage of RAM devoted to dataset.
+    description: (deprecated) How much data do you want to keep in memory in the DB. This will be used to tune settings in the database server appropriately. Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes. If suffixed with %, one will get that percentage of RAM devoted to dataset.
   max-connections:
     default: -1
     type: int
