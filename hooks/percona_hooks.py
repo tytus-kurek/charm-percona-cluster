@@ -20,6 +20,7 @@ from charmhelpers.core.hookenv import (
     relation_type,
     DEBUG,
     INFO,
+    is_leader,
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -44,24 +45,23 @@ from percona_utils import (
     get_host_ip,
     get_cluster_hosts,
     configure_sstuser,
-    seeded, mark_seeded,
     configure_mysql_root_password,
     relation_clear,
     assert_charm_supports_ipv6,
     unit_sorted,
     get_db_helper,
+    mark_seeded, seeded,
     install_mysql_ocf,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
 )
 from charmhelpers.contrib.hahelpers.cluster import (
+    is_elected_leader,
+    is_clustered,
+    oldest_peer,
     DC_RESOURCE_NAME,
     peer_units,
-    oldest_peer,
-    eligible_leader,
-    is_clustered,
-    is_leader,
 )
 from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
@@ -94,26 +94,16 @@ def install():
         add_source(config('source'), config('key'))
 
     configure_mysql_root_password(config('root-password'))
-    db_helper = get_db_helper()
-    cfg_passwd = config('sst-password')
-    mysql_password = db_helper.get_mysql_password(username='sstuser',
-                                                  password=cfg_passwd)
     # Render base configuration (no cluster)
-    render_config(mysql_password=mysql_password)
+    render_config()
     apt_update(fatal=True)
     apt_install(PACKAGES, fatal=True)
-    configure_sstuser(mysql_password)
+    configure_sstuser(config('sst-password'))
 
 
-def render_config(clustered=False, hosts=[], mysql_password=None):
+def render_config(clustered=False, hosts=[]):
     if not os.path.exists(os.path.dirname(MY_CNF)):
         os.makedirs(os.path.dirname(MY_CNF))
-
-    if not mysql_password:
-        db_helper = get_db_helper()
-        cfg_passwd = config('sst-password')
-        mysql_password = db_helper.get_mysql_password(username='sstuser',
-                                                      password=cfg_passwd)
 
     context = {
         'cluster_name': 'juju_cluster',
@@ -121,7 +111,7 @@ def render_config(clustered=False, hosts=[], mysql_password=None):
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
         'sst_method': 'xtrabackup',
-        'sst_password': mysql_password,
+        'sst_password': config('sst-password'),
         'innodb_file_per_table': config('innodb-file-per-table'),
         'table_open_cache': config('table-open-cache'),
         'lp1366997_workaround': config('lp1366997-workaround')
@@ -152,14 +142,26 @@ def config_changed():
     pre_hash = file_hash(MY_CNF)
     render_config(clustered, hosts)
     if file_hash(MY_CNF) != pre_hash:
-        oldest = oldest_peer(peer_units())
-        if clustered and not oldest and not seeded():
-            # Bootstrap node into seeded cluster
-            service_restart('mysql')
-            mark_seeded()
-        elif not clustered:
-            # Restart with new configuration
-            service_restart('mysql')
+        try:
+            # NOTE(jamespage): try with leadership election
+            if clustered and not is_leader() and not seeded():
+                # Bootstrap node into seeded cluster
+                service_restart('mysql')
+                mark_seeded()
+            elif not clustered:
+                # Restart with new configuration
+                service_restart('mysql')
+        except NotImplementedError:
+            # NOTE(jamespage): fallback to legacy behaviour.
+            oldest = oldest_peer(peer_units())
+            if clustered and not oldest and not seeded():
+                # Bootstrap node into seeded cluster
+                service_restart('mysql')
+                mark_seeded()
+            elif not clustered:
+                # Restart with new configuration
+                service_restart('mysql')
+
     # Notify any changes to the access network
     for r_id in relation_ids('shared-db'):
         for unit in related_units(r_id):
@@ -192,13 +194,14 @@ def cluster_changed():
     # attention to those excluded by default in peer_echo().
     # TODO(dosaboy): extend peer_echo() to support providing exclusion list as
     #                well as inclusion list.
+    # NOTE(jamespage): deprecated - leader-election
     rdata = relation_get()
     inc_list = []
     for attr in rdata.iterkeys():
         if attr not in ['hostname', 'private-address', 'public-address']:
             inc_list.append(attr)
-
     peer_echo(includes=inc_list)
+    # NOTE(jamespage): deprecated - leader-election
 
     config_changed()
 
@@ -207,7 +210,7 @@ def cluster_changed():
 @hooks.hook('db-relation-changed')
 @hooks.hook('db-admin-relation-changed')
 def db_changed(relation_id=None, unit=None, admin=None):
-    if not eligible_leader(DC_RESOURCE_NAME):
+    if not is_elected_leader(DC_RESOURCE_NAME):
         log('Service is peered, clearing db relation'
             ' as this service unit is not the leader')
         relation_clear(relation_id)
@@ -239,14 +242,24 @@ def db_changed(relation_id=None, unit=None, admin=None):
 
 
 def get_db_host(client_hostname):
+    vips = config('vip').split() if config('vip') else []
     client_ip = get_host_ip(client_hostname)
-    if is_clustered():
-        return config('vip')
     access_network = config('access-network')
     if (access_network is not None and
             is_address_in_network(access_network, client_ip)):
-        return get_address_in_network(access_network)
-    return unit_get('private-address')
+        if is_clustered():
+            for vip in vips:
+                if is_address_in_network(access_network, vip):
+                    return vip
+        else:
+            return get_address_in_network(access_network)
+    elif is_clustered():
+        return config('vip')  # NOTE on private network
+    else:
+        if config('prefer-ipv6'):
+            return get_ipv6_addr(exc_list=vips)[0]
+        else:
+            return unit_get('private-address')
 
 
 def configure_db_for_hosts(hosts, database, username, db_helper):
@@ -269,7 +282,10 @@ def configure_db_for_hosts(hosts, database, username, db_helper):
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
-    if not eligible_leader(DC_RESOURCE_NAME):
+    if not is_elected_leader(DC_RESOURCE_NAME):
+        # NOTE(jamespage): relation level data candidate
+        log('Service is peered, clearing shared-db relation'
+            ' as this service unit is not the leader')
         relation_clear(relation_id)
         # Each unit needs to set the db information otherwise if the unit
         # with the info dies the settings die with it Bug# 1355848
@@ -282,9 +298,6 @@ def shared_db_changed(relation_id=None, unit=None):
                              if 'password' in key.lower()]
                 if len(passwords) > 0:
                     relation_set(relation_id=rel_id, **peerdb_settings)
-
-        log('Service is peered, clearing shared-db relation'
-            ' as this service unit is not the leader')
         return
 
     settings = relation_get(unit=unit, rid=relation_id)
@@ -437,7 +450,7 @@ def ha_relation_joined():
 @hooks.hook('ha-relation-changed')
 def ha_relation_changed():
     clustered = relation_get('clustered')
-    if (clustered and is_leader(DC_RESOURCE_NAME)):
+    if (clustered and is_elected_leader(DC_RESOURCE_NAME)):
         log('Cluster configured, notifying other services')
         # Tell all related services to start using the VIP
         for r_id in relation_ids('shared-db'):
@@ -449,15 +462,14 @@ def ha_relation_changed():
         for r_id in relation_ids('db-admin'):
             for unit in related_units(r_id):
                 db_changed(r_id, unit, admin=True)
-    else:
-        # Clear any settings data for non-leader units
-        log('Cluster configured, not leader, clearing relation data')
-        for r_id in relation_ids('shared-db'):
-            relation_clear(r_id)
-        for r_id in relation_ids('db'):
-            relation_clear(r_id)
-        for r_id in relation_ids('db-admin'):
-            relation_clear(r_id)
+
+
+@hooks.hook('leader-settings-changed')
+def leader_settings_changed():
+    # Notify any changes to data in leader storage
+    for r_id in relation_ids('shared-db'):
+        for unit in related_units(r_id):
+            shared_db_changed(r_id, unit)
 
 
 @hooks.hook('nrpe-external-master-relation-joined',
