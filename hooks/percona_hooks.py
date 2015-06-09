@@ -420,9 +420,7 @@ def ha_relation_joined():
     resources = {'res_mysql_vip': res_mysql_vip,
                  'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
     db_helper = get_db_helper()
-    cfg_passwd = config('sst-password')
-    sstpsswd = db_helper.get_mysql_password(username='sstuser',
-                                            password=cfg_passwd)
+    sstpsswd = config('sst-password')
     resource_params = {'res_mysql_vip': vip_params,
                        'res_mysql_monitor':
                        RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
