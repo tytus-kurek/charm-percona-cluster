@@ -19,7 +19,7 @@ class ThreeNode(basic_deployment.BasicDeployment):
         new_master = self.find_master()
         assert new_master is not None, "master unit not found"
         assert (new_master.info['public-address'] !=
-                    old_master.info['public-address'])
+                old_master.info['public-address'])
 
         assert self.is_port_open(address=self.vip), 'cannot connect to vip'
 
