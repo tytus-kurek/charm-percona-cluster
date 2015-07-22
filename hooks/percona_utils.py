@@ -5,6 +5,8 @@ import socket
 import tempfile
 import os
 import shutil
+import uuid
+
 from charmhelpers.core.host import (
     lsb_release
 )
@@ -20,6 +22,14 @@ from charmhelpers.core.hookenv import (
     config,
     log,
     DEBUG,
+    INFO,
+    WARNING,
+    ERROR,
+    is_leader,
+)
+from charmhelpers.contrib.hahelpers.cluster import (
+    oldest_peer,
+    peer_units,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -32,6 +42,11 @@ from charmhelpers.contrib.database.mysql import (
     MySQLHelper,
 )
 
+# NOTE: python-mysqldb is installed by charmhelpers.contrib.database.mysql so
+# hence why we import here
+from MySQLdb import (
+    OperationalError
+)
 
 PACKAGES = [
     'percona-xtradb-cluster-server-5.5',
@@ -88,6 +103,29 @@ def get_host_ip(hostname=None):
         answers = dns.resolver.query(hostname, 'A')
         if answers:
             return answers[0].address
+
+
+def is_sufficient_peers():
+    """If min-cluster-size has been provided, check that we have sufficient
+    number of peers to proceed with bootstrapping percona cluster.
+    """
+    min_size = config('min-cluster-size')
+    if min_size:
+        size = 0
+        for rid in relation_ids('cluster'):
+            size = len(related_units(rid))
+
+        # Include this unit
+        size += 1
+        if min_size > size:
+            log("Insufficient number of units to configure percona cluster "
+                "(expected=%s, got=%s)" % (min_size, size), level=INFO)
+            return False
+        else:
+            log("Sufficient units available to configure percona cluster "
+                "(>=%s)" % (min_size), level=DEBUG)
+
+    return True
 
 
 def get_cluster_hosts():
@@ -246,3 +284,86 @@ def install_mysql_ocf():
             shutil.copy(src_file, dest_file)
         else:
             log("'%s' already exists, skipping" % dest_file, level='INFO')
+
+
+def get_wsrep_value(key):
+    m_helper = get_db_helper()
+    try:
+        m_helper.connect(password=m_helper.get_mysql_root_password())
+    except OperationalError:
+        log("Could not connect to db", DEBUG)
+        return None
+
+    cursor = m_helper.connection.cursor()
+    ret = None
+    try:
+        cursor.execute("show status like '%s'" % (key))
+        ret = cursor.fetchall()
+    except:
+        log("Failed to get '%s'", ERROR)
+        return None
+    finally:
+        cursor.close()
+
+    if ret:
+        return ret[0][1]
+
+    return None
+
+
+def is_bootstrapped():
+    if not is_sufficient_peers():
+        return False
+
+    uuids = []
+    rids = relation_ids('cluster') or []
+    for rid in rids:
+        units = related_units(rid)
+        units.append(local_unit())
+        for unit in units:
+            id = relation_get('bootstrap-uuid', unit=unit, rid=rid)
+            if id:
+                uuids.append(id)
+
+    if uuids:
+        if len(set(uuids)) > 1:
+            log("Found inconsistent bootstrap uuids - %s" % (uuids), WARNING)
+
+        return True
+
+    try:
+        if not is_leader():
+            return False
+    except:
+        oldest = oldest_peer(peer_units())
+        if not oldest:
+            return False
+
+    # If this is the leader but we have not yet broadcast the cluster uuid then
+    # do so now.
+    wsrep_ready = get_wsrep_value('wsrep_ready') or ""
+    if wsrep_ready.lower() in ['on', 'ready']:
+        cluster_state_uuid = get_wsrep_value('wsrep_cluster_state_uuid')
+        if cluster_state_uuid:
+            notify_bootstrapped(cluster_uuid=cluster_state_uuid)
+            return True
+
+    return False
+
+
+def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
+    if cluster_rid:
+        rids = [cluster_rid]
+    else:
+        rids = relation_ids('cluster')
+
+    log("Notifying peers that percona is bootstrapped", DEBUG)
+    if not cluster_uuid:
+        cluster_uuid = get_wsrep_value('wsrep_cluster_state_uuid')
+        if not cluster_uuid:
+            cluster_uuid = str(uuid.uuid4())
+            log("Could not determine cluster uuid so using '%s' instead" %
+                (cluster_uuid), INFO)
+
+    for rid in rids:
+        relation_set(relation_id=rid, **{'bootstrap-uuid': cluster_uuid})

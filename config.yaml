@@ -111,3 +111,9 @@ options:
       but also can be set to any specific value for the system.
       Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes.
       If suffixed with %, one will get that percentage of system total memory devoted.
+  min-cluster-size:
+    type: int
+    default:
+    description: |
+      Minimum number of units expected to exist before charm will attempt to
+      bootstrap percona cluster. If no value is provided this setting is ignored.
