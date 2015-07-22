@@ -48,7 +48,7 @@ from MySQLdb import (
     OperationalError
 )
 
-if lsb_release()['DISTRIB_CODENAME'] == 'vivid':
+if lsb_release()['DISTRIB_CODENAME'] in ['vivid', 'wily']:
     # NOTE(beisner): pxc 5.6 client package is not available in Vivid, install
     # mysql 5.6 client instead per https://launchpad.net/bugs/1476845.
     PACKAGES = [
