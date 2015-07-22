@@ -128,3 +128,20 @@ class UtilsTests(unittest.TestCase):
                                                    '0.0.0.0': 'hostB'})
         mock_rel_get.assert_called_with(rid=2, unit=4)
         self.assertEqual(hosts, ['hostA', 'hostB'])
+
+    @mock.patch.object(percona_utils, 'related_units')
+    @mock.patch.object(percona_utils, 'relation_ids')
+    @mock.patch.object(percona_utils, 'config')
+    def test_is_sufficient_peers(self, mock_config, mock_relation_ids,
+                                 mock_related_units):
+        _config = {'min-cluster-size': None}
+        mock_config.side_effect = lambda key: _config.get(key)
+        self.assertTrue(percona_utils.is_sufficient_peers())
+
+        mock_relation_ids.return_value = ['cluster:0']
+        mock_related_units.return_value = ['test/0']
+        _config = {'min-cluster-size': 3}
+        self.assertFalse(percona_utils.is_sufficient_peers())
+
+        mock_related_units.return_value = ['test/0', 'test/1']
+        self.assertTrue(percona_utils.is_sufficient_peers())

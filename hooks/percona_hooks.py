@@ -1,17 +1,19 @@
 #!/usr/bin/python
 # TODO: Support changes to root and sstuser passwords
-
 import sys
 import json
 import os
 import socket
+import time
 
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
     is_relation_made,
     log,
+    local_unit,
     relation_get,
     relation_set,
+    relation_id,
     relation_ids,
     related_units,
     unit_get,
@@ -20,10 +22,13 @@ from charmhelpers.core.hookenv import (
     relation_type,
     DEBUG,
     INFO,
+    WARNING,
     is_leader,
 )
 from charmhelpers.core.host import (
+    service,
     service_restart,
+    service_start,
     file_hash,
     lsb_release,
 )
@@ -52,6 +57,9 @@ from percona_utils import (
     get_db_helper,
     mark_seeded, seeded,
     install_mysql_ocf,
+    is_sufficient_peers,
+    notify_bootstrapped,
+    is_bootstrapped,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -131,6 +139,57 @@ def render_config(clustered=False, hosts=[]):
     render(os.path.basename(MY_CNF), MY_CNF, context, perms=0o444)
 
 
+def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
+    """Render mysql config and restart mysql service if file changes as a
+    result.
+
+    If bootstrap is True we do a bootstrap-pxc in order to bootstrap the
+    percona cluster. This should only be performed once at cluster creation
+    time.
+
+    If percona is already bootstrapped we can get away with just ensuring that
+    it is started so long as the new node to be added is guaranteed to have
+    been restarted so as to apply the new config.
+    """
+    pre_hash = file_hash(MY_CNF)
+    render_config(clustered, hosts)
+    if file_hash(MY_CNF) != pre_hash:
+        if bootstrap:
+            service('bootstrap-pxc', 'mysql')
+            notify_bootstrapped()
+            update_shared_db_rels()
+        else:
+            delay = 1
+            attempts = 0
+            max_retries = 5
+            # NOTE(dosaboy): avoid unnecessary restarts. Once mysql is started
+            # it needn't be restarted when new units join the cluster since the
+            # new units will join and apply their own config.
+            if not seeded():
+                action = service_restart
+            else:
+                action = service_start
+
+            while not action('mysql'):
+                if attempts == max_retries:
+                    raise Exception("Failed to start mysql (max retries "
+                                    "reached)")
+
+                log("Failed to start mysql - retrying in %ss" % (delay),
+                    WARNING)
+                time.sleep(delay)
+                delay += 2
+                attempts += 1
+            else:
+                mark_seeded()
+
+
+def update_shared_db_rels():
+    for r_id in relation_ids('shared-db'):
+        for unit in related_units(r_id):
+            shared_db_changed(r_id, unit)
+
+
 @hooks.hook('upgrade-charm')
 @hooks.hook('config-changed')
 def config_changed():
@@ -139,33 +198,48 @@ def config_changed():
 
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
-    pre_hash = file_hash(MY_CNF)
-    render_config(clustered, hosts)
-    if file_hash(MY_CNF) != pre_hash:
+    bootstrapped = is_bootstrapped()
+
+    # NOTE: only configure the cluster if we have sufficient peers. This only
+    # applies if min-cluster-size is provided and is used to avoid extraneous
+    # configuration changes and premature bootstrapping as the cluster is
+    # deployed.
+    if is_sufficient_peers():
         try:
             # NOTE(jamespage): try with leadership election
-            if clustered and not is_leader() and not seeded():
-                # Bootstrap node into seeded cluster
-                service_restart('mysql')
-                mark_seeded()
-            elif not clustered:
-                # Restart with new configuration
-                service_restart('mysql')
+            if not clustered:
+                render_config_restart_on_changed(clustered, hosts)
+            elif clustered and is_leader():
+                log("Leader unit - bootstrap required=%s" % (not bootstrapped),
+                    DEBUG)
+                render_config_restart_on_changed(clustered, hosts,
+                                                 bootstrap=not bootstrapped)
+            elif bootstrapped:
+                log("Cluster is bootstrapped - configuring mysql on this node",
+                    DEBUG)
+                render_config_restart_on_changed(clustered, hosts)
+            else:
+                log("Not configuring", DEBUG)
+
         except NotImplementedError:
             # NOTE(jamespage): fallback to legacy behaviour.
             oldest = oldest_peer(peer_units())
-            if clustered and not oldest and not seeded():
-                # Bootstrap node into seeded cluster
-                service_restart('mysql')
-                mark_seeded()
-            elif not clustered:
-                # Restart with new configuration
-                service_restart('mysql')
+            if not clustered:
+                render_config_restart_on_changed(clustered, hosts)
+            elif clustered and oldest:
+                log("Leader unit - bootstrap required=%s" % (not bootstrapped),
+                    DEBUG)
+                render_config_restart_on_changed(clustered, hosts,
+                                                 bootstrap=not bootstrapped)
+            elif bootstrapped:
+                log("Cluster is bootstrapped - configuring mysql on this node",
+                    DEBUG)
+                render_config_restart_on_changed(clustered, hosts)
+            else:
+                log("Not configuring", DEBUG)
 
     # Notify any changes to the access network
-    for r_id in relation_ids('shared-db'):
-        for unit in related_units(r_id):
-            shared_db_changed(r_id, unit)
+    update_shared_db_rels()
 
     # (re)install pcmkr agent
     install_mysql_ocf()
@@ -176,15 +250,20 @@ def config_changed():
 
 
 @hooks.hook('cluster-relation-joined')
-def cluster_joined(relation_id=None):
+def cluster_joined():
     if config('prefer-ipv6'):
         addr = get_ipv6_addr(exc_list=[config('vip')])[0]
         relation_settings = {'private-address': addr,
                              'hostname': socket.gethostname()}
         log("Setting cluster relation: '%s'" % (relation_settings),
             level=INFO)
-        relation_set(relation_id=relation_id,
-                     relation_settings=relation_settings)
+        relation_set(relation_settings=relation_settings)
+
+    # Ensure all new peers are aware
+    cluster_state_uuid = relation_get('bootstrap-uuid', unit=local_unit())
+    if cluster_state_uuid:
+        notify_bootstrapped(cluster_rid=relation_id(),
+                            cluster_uuid=cluster_state_uuid)
 
 
 @hooks.hook('cluster-relation-departed')
@@ -282,10 +361,15 @@ def configure_db_for_hosts(hosts, database, username, db_helper):
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
+    if not is_bootstrapped():
+        log("Percona cluster not yet bootstrapped - deferring shared-db rel "
+            "until bootstrapped", DEBUG)
+        return
+
     if not is_elected_leader(DC_RESOURCE_NAME):
         # NOTE(jamespage): relation level data candidate
-        log('Service is peered, clearing shared-db relation'
-            ' as this service unit is not the leader')
+        log('Service is peered, clearing shared-db relation '
+            'as this service unit is not the leader')
         relation_clear(relation_id)
         # Each unit needs to set the db information otherwise if the unit
         # with the info dies the settings die with it Bug# 1355848
@@ -419,7 +503,7 @@ def ha_relation_joined():
 
     resources = {'res_mysql_vip': res_mysql_vip,
                  'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
-    db_helper = get_db_helper()
+
     sstpsswd = config('sst-password')
     resource_params = {'res_mysql_vip': vip_params,
                        'res_mysql_monitor':
@@ -451,9 +535,7 @@ def ha_relation_changed():
     if (clustered and is_elected_leader(DC_RESOURCE_NAME)):
         log('Cluster configured, notifying other services')
         # Tell all related services to start using the VIP
-        for r_id in relation_ids('shared-db'):
-            for unit in related_units(r_id):
-                shared_db_changed(r_id, unit)
+        update_shared_db_rels()
         for r_id in relation_ids('db'):
             for unit in related_units(r_id):
                 db_changed(r_id, unit, admin=False)
@@ -465,9 +547,7 @@ def ha_relation_changed():
 @hooks.hook('leader-settings-changed')
 def leader_settings_changed():
     # Notify any changes to data in leader storage
-    for r_id in relation_ids('shared-db'):
-        for unit in related_units(r_id):
-            shared_db_changed(r_id, unit)
+    update_shared_db_rels()
 
 
 @hooks.hook('nrpe-external-master-relation-joined',
