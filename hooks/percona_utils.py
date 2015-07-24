@@ -48,17 +48,27 @@ from MySQLdb import (
     OperationalError
 )
 
-PACKAGES = [
-    'percona-xtradb-cluster-server-5.5',
-    'percona-xtradb-cluster-client-5.5',
-]
-
 KEY = "keys/repo.percona.com"
 REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
 MY_CNF = "/etc/mysql/my.cnf"
 SEEDED_MARKER = "/var/lib/mysql/seeded"
 HOSTS_FILE = '/etc/hosts'
+
+
+def determine_packages():
+    if lsb_release()['DISTRIB_CODENAME'] > 'utopic':
+        # NOTE(beisner): pxc 5.6 client package is not available in Vivid, install
+        # mysql 5.6 client instead per https://launchpad.net/bugs/1476845.
+        return [
+            'percona-xtradb-cluster-server-5.6',
+            'mysql-client-5.6'
+        ]
+    else:
+        return [
+            'percona-xtradb-cluster-server-5.5',
+            'percona-xtradb-cluster-client-5.5',
+        ]
 
 
 def seeded():

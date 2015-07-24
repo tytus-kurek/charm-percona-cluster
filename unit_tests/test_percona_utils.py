@@ -145,3 +145,17 @@ class UtilsTests(unittest.TestCase):
 
         mock_related_units.return_value = ['test/0', 'test/1']
         self.assertTrue(percona_utils.is_sufficient_peers())
+
+    @mock.patch.object(percona_utils, 'lsb_release')
+    def test_packages_gt_utopic(self, mock_lsb_release):
+        mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'vivid'}
+        self.assertEqual(percona_utils.determine_packages(),
+                         ['percona-xtradb-cluster-server-5.6',
+                          'mysql-client-5.6'])
+
+    @mock.patch.object(percona_utils, 'lsb_release')
+    def test_packages_le_utopic(self, mock_lsb_release):
+        mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'utopic'}
+        self.assertEqual(percona_utils.determine_packages(),
+                         ['percona-xtradb-cluster-server-5.5',
+                          'percona-xtradb-cluster-client-5.5'])
