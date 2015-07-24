@@ -58,8 +58,9 @@ HOSTS_FILE = '/etc/hosts'
 
 def determine_packages():
     if lsb_release()['DISTRIB_CODENAME'] > 'utopic':
-        # NOTE(beisner): pxc 5.6 client package is not available in Vivid, install
-        # mysql 5.6 client instead per https://launchpad.net/bugs/1476845.
+        # NOTE(beisner): pxc 5.6 client package is not available
+        # in Vivid, install mysql 5.6 client instead per
+        # https://launchpad.net/bugs/1476845.
         return [
             'percona-xtradb-cluster-server-5.6',
             'mysql-client-5.6'
