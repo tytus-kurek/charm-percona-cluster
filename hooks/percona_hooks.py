@@ -44,7 +44,7 @@ from charmhelpers.contrib.peerstorage import (
     peer_retrieve_by_prefix,
 )
 from percona_utils import (
-    PACKAGES,
+    determine_packages,
     MY_CNF,
     setup_percona_repo,
     get_host_ip,
@@ -105,7 +105,7 @@ def install():
     # Render base configuration (no cluster)
     render_config()
     apt_update(fatal=True)
-    apt_install(PACKAGES, fatal=True)
+    apt_install(determine_packages(), fatal=True)
     configure_sstuser(config('sst-password'))
 
 
