@@ -2,53 +2,102 @@ options:
   source:
     type: string
     default:
-    description: Package install location for Percona XtraDB Cluster (defaults to distro for >= 14.04)
+    description: |
+      Package install location for Percona XtraDB Cluster (defaults to distro
+      for >= 14.04)
   key:
     type: string
     default:
     description: |
       Key ID to import to the apt keyring to support use with arbitary source
       configuration from outside of Launchpad archives or PPA's.
+  innodb-file-per-table:
+    type: boolean
+    default: True
+    description: |
+      Turns on innodb_file_per_table option, which will make MySQL put each
+      InnoDB table into separate .idb file. Existing InnoDB tables will remain
+      in ibdata1 file - full dump/import is needed to get rid of large
+      ibdata1 file
+  table-open-cache:
+    type: int
+    default: 2048
+    description:
+      Sets table_open_cache (formerly known as table_cache) to mysql.
   dataset-size:
-    default:
     type: string
-    description: (deprecated) How much data do you want to keep in memory in the DB. This will be used to tune settings in the database server appropriately. Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes. If suffixed with %, one will get that percentage of RAM devoted to dataset.
+    default:
+    description: |
+      (DEPRECATED - use innodb-buffer-pool-size) How much data should be kept
+      in memory in the DB. This will be used to tune settings in the database
+      server appropriately. Supported suffixes include K/M/G/T. If suffixed
+      with %, one will get that percentage of RAM allocated to the dataset.
+  innodb-buffer-pool-size:
+    type: string
+    default:
+    description: |
+      By default this value will be set according to 50% of system total
+      memory but also can be set to any specific value for the system.
+      Supported suffixes include K/M/G/T. If suffixed with %, one will get that
+      percentage of system total memory allocated.
   max-connections:
-    default: -1
     type: int
-    description: Maximum connections to allow. -1 means use the server's compiled in default.
+    default: -1
+    description: |
+      Maximum connections to allow. A value of -1 means use the server's
+      compiled-in default.
   wait-timeout:
-    default: -1
     type: int
-    description: The number of seconds the server waits for activity on a noninteractive connection before closing it. -1 means use the server's compiled in default.
+    default: -1
+    description: |
+      The number of seconds the server waits for activity on a noninteractive
+      connection before closing it. -1 means use the server's compiled in
+      default.
   root-password:
     type: string
     default:
-    description: Root password for MySQL access; must be configured pre-deployment for Active-Active clusters.
+    description: |
+      Root password for MySQL access; must be configured pre-deployment for
+      Active-Active clusters.
   sst-password:
     type: string
     default:
-    description: Re-sync account password for new cluster nodes; must be configured pre-deployment for Active-Active clusters.
+    description: |
+      Re-sync account password for new cluster nodes; must be configured
+      pre-deployment for Active-Active clusters.
+  min-cluster-size:
+    type: int
+    default:
+    description: |
+      Minimum number of units expected to exist before charm will attempt to
+      bootstrap percona cluster. If no value is provided this setting is
+      ignored.
   vip:
     type: string
     default:
-    description: Virtual IP to use to front Percona XtraDB Cluster in active/active HA configuration
+    description: |
+      Virtual IP to use to front Percona XtraDB Cluster in active/active HA
+      configuration
   vip_iface:
     type: string
     default: eth0
-    description: Network interface on which to place the Virtual IP
+    description: Network interface on which to place the Virtual IP.
   vip_cidr:
     type: int
     default: 24
-    description: Netmask that will be used for the Virtual IP
+    description: Netmask that will be used for the Virtual IP.
   ha-bindiface:
     type: string
     default: eth0
-    description: Default network interface on which HA cluster will bind to communication with the other members of the HA Cluster.
+    description: |
+      Default network interface on which HA cluster will bind to communication
+      with the other members of the HA Cluster.
   ha-mcastport:
     type: int
     default: 5490
-    description: Default multicast port number that will be used to communicate between HA Cluster nodes.
+    description: |
+      Default multicast port number that will be used to communicate between HA
+      Cluster nodes.
   # Network configuration options
   # by default all access is over 'private-address'
   access-network:
@@ -70,50 +119,29 @@ options:
       order for this charm to function correctly, the privacy extension must be
       disabled and a non-temporary address must be configured/available on
       your network interface.
-  innodb-file-per-table:
-    type: boolean
-    default: True
-    description: |
-      Turns on innodb_file_per_table option, which will make MySQL put each
-      InnoDB table into separate .idb file. Existing InnoDB tables will remain
-      in ibdata1 file - full dump/import is needed to get rid of large
-      ibdata1 file
-  table-open-cache:
-    type: int
-    default: 2048
-    description:
-      Sets table_open_cache (formerly known as table_cache) to mysql.
   lp1366997-workaround:
     type: boolean
     default: False
-    description: Adds two config options (wsrep_drupal_282555_workaround and wsrep_retry_autocommit) as a workaround for Percona Primary Key bug (see lplp1366997).
-  nagios_context:
-    default: "juju"
-    type: string
     description: |
-      Used by the nrpe-external-master subordinate charm.
-      A string that will be prepended to instance name to set the host name
-      in nagios. So for instance the hostname would be something like:
-          juju-myservice-0
+      Adds two config options (wsrep_drupal_282555_workaround and
+      wsrep_retry_autocommit) as a workaround for Percona Primary Key bug (see
+      LP 1366997).
+  # Nagios configuration options
+  nagios_context:
+    type: string
+    default: 'juju'
+    description: |
+      Used by the nrpe-external-master subordinate charm. A string that will be
+      prepended to instance name to set the host name in nagios. So for
+      instance the hostname would be something like:
+      .
+        juju-myservice-0
+      .
       If you're running multiple environments with the same services in them
       this allows you to differentiate between them.
   nagios_servicegroups:
-    default: ""
     type: string
+    default: ''
     description: |
-        A comma-separated list of nagios servicegroups.
-        If left empty, the nagios_context will be used as the servicegroup
-  innodb-buffer-pool-size:
-    default:
-    type: string
-    description: |
-      By default this value will be set according to the 50% of system total memory
-      but also can be set to any specific value for the system.
-      Suffix this value with 'K','M','G', or 'T' to get the relevant kilo/mega/etc. bytes.
-      If suffixed with %, one will get that percentage of system total memory devoted.
-  min-cluster-size:
-    type: int
-    default:
-    description: |
-      Minimum number of units expected to exist before charm will attempt to
-      bootstrap percona cluster. If no value is provided this setting is ignored.
+      A comma-separated list of nagios servicegroups. If left empty, the
+      nagios_context will be used as the servicegroup.
