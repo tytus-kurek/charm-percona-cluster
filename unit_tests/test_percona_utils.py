@@ -129,6 +129,7 @@ class UtilsTests(unittest.TestCase):
         mock_rel_get.assert_called_with(rid=2, unit=4)
         self.assertEqual(hosts, ['hostA', 'hostB'])
 
+    @mock.patch.object(percona_utils, 'log', lambda *args, **kwargs: None)
     @mock.patch.object(percona_utils, 'related_units')
     @mock.patch.object(percona_utils, 'relation_ids')
     @mock.patch.object(percona_utils, 'config')

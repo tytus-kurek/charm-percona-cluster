@@ -25,11 +25,6 @@ from charmhelpers.core.hookenv import (
     INFO,
     WARNING,
     ERROR,
-    is_leader,
-)
-from charmhelpers.contrib.hahelpers.cluster import (
-    oldest_peer,
-    peer_units,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -341,23 +336,6 @@ def is_bootstrapped():
             log("Found inconsistent bootstrap uuids - %s" % (uuids), WARNING)
 
         return True
-
-    try:
-        if not is_leader():
-            return False
-    except:
-        oldest = oldest_peer(peer_units())
-        if not oldest:
-            return False
-
-    # If this is the leader but we have not yet broadcast the cluster uuid then
-    # do so now.
-    wsrep_ready = get_wsrep_value('wsrep_ready') or ""
-    if wsrep_ready.lower() in ['on', 'ready']:
-        cluster_state_uuid = get_wsrep_value('wsrep_cluster_state_uuid')
-        if cluster_state_uuid:
-            notify_bootstrapped(cluster_uuid=cluster_state_uuid)
-            return True
 
     return False
 
