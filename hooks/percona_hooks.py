@@ -60,6 +60,7 @@ from percona_utils import (
     is_sufficient_peers,
     notify_bootstrapped,
     is_bootstrapped,
+    get_wsrep_value,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -180,8 +181,11 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
                 time.sleep(delay)
                 delay += 2
                 attempts += 1
-            else:
-                mark_seeded()
+
+        # If we get here we assume prior actions have succeeded to always
+        # this unit is marked as seeded so that subsequent calls don't result
+        # in a restart.
+        mark_seeded()
 
 
 def update_shared_db_rels():
@@ -191,6 +195,28 @@ def update_shared_db_rels():
 
 
 @hooks.hook('upgrade-charm')
+def upgrade():
+    check_bootstrap = False
+    try:
+        if is_leader():
+            check_bootstrap = True
+    except:
+        if oldest_peer(peer_units()):
+            check_bootstrap = True
+
+    if check_bootstrap and not is_bootstrapped() and is_sufficient_peers():
+        # If this is the leader but we have not yet broadcast the cluster uuid
+        # then do so now.
+        wsrep_ready = get_wsrep_value('wsrep_ready') or ""
+        if wsrep_ready.lower() in ['on', 'ready']:
+            cluster_state_uuid = get_wsrep_value('wsrep_cluster_state_uuid')
+            if cluster_state_uuid:
+                mark_seeded()
+                notify_bootstrapped(cluster_uuid=cluster_state_uuid)
+
+    config_changed()
+
+
 @hooks.hook('config-changed')
 def config_changed():
     if config('prefer-ipv6'):
