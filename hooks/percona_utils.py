@@ -345,8 +345,10 @@ def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
         rids = [cluster_rid]
     else:
         rids = relation_ids('cluster')
+        if not rids:
+            log("No relation ids found for 'cluster'", level=INFO)
+            return
 
-    log("Notifying peers that percona is bootstrapped", DEBUG)
     if not cluster_uuid:
         cluster_uuid = get_wsrep_value('wsrep_cluster_state_uuid')
         if not cluster_uuid:
@@ -354,5 +356,7 @@ def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
             log("Could not determine cluster uuid so using '%s' instead" %
                 (cluster_uuid), INFO)
 
+    log("Notifying peers that percona is bootstrapped (uuid=%s)" %
+        (cluster_uuid), DEBUG)
     for rid in rids:
         relation_set(relation_id=rid, **{'bootstrap-uuid': cluster_uuid})

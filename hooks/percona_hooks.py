@@ -154,11 +154,13 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     """
     pre_hash = file_hash(MY_CNF)
     render_config(clustered, hosts)
-    if file_hash(MY_CNF) != pre_hash:
+    if file_hash(MY_CNF) != pre_hash or bootstrap:
         if bootstrap:
             service('bootstrap-pxc', 'mysql')
+            # NOTE(dosaboy): this will not actually do anything if no cluster
+            # relation id exists yet.
             notify_bootstrapped()
-            update_shared_db_rels()
+            update_db_rels = True
         else:
             delay = 1
             attempts = 0
@@ -186,6 +188,11 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
         # this unit is marked as seeded so that subsequent calls don't result
         # in a restart.
         mark_seeded()
+
+        if update_db_rels:
+            update_shared_db_rels()
+    else:
+        log("Config file '%s' unchanged", level=DEBUG)
 
 
 def update_shared_db_rels():
@@ -233,9 +240,7 @@ def config_changed():
     if is_sufficient_peers():
         try:
             # NOTE(jamespage): try with leadership election
-            if not clustered:
-                render_config_restart_on_changed(clustered, hosts)
-            elif clustered and is_leader():
+            if is_leader():
                 log("Leader unit - bootstrap required=%s" % (not bootstrapped),
                     DEBUG)
                 render_config_restart_on_changed(clustered, hosts,
@@ -250,9 +255,7 @@ def config_changed():
         except NotImplementedError:
             # NOTE(jamespage): fallback to legacy behaviour.
             oldest = oldest_peer(peer_units())
-            if not clustered:
-                render_config_restart_on_changed(clustered, hosts)
-            elif clustered and oldest:
+            if oldest:
                 log("Leader unit - bootstrap required=%s" % (not bootstrapped),
                     DEBUG)
                 render_config_restart_on_changed(clustered, hosts,
@@ -387,7 +390,7 @@ def configure_db_for_hosts(hosts, database, username, db_helper):
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('shared-db-relation-changed')
 def shared_db_changed(relation_id=None, unit=None):
-    if not is_bootstrapped():
+    if not seeded():
         log("Percona cluster not yet bootstrapped - deferring shared-db rel "
             "until bootstrapped", DEBUG)
         return
