@@ -154,6 +154,7 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     """
     pre_hash = file_hash(MY_CNF)
     render_config(clustered, hosts)
+    update_db_rels = False
     if file_hash(MY_CNF) != pre_hash or bootstrap:
         if bootstrap:
             service('bootstrap-pxc', 'mysql')
