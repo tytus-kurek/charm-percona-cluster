@@ -1,0 +1,26 @@
+#!/usr/bin/python
+import os
+import subprocess
+import sys
+
+from charmhelpers.core import hookenv
+
+if __name__ == "__main__":
+    override_path = '/etc/init/mysql.override'
+    if os.path.exists(override_path):
+        try:
+            os.remove(override_path)
+        except OSError, e:
+            hookenv.action_fail(
+                "Error removing override file: %s\n" % e)
+            sys.exit(-1)
+    else:
+        print "No override file."
+
+    try:
+        subprocess.check_call(["/usr/sbin/service", "mysql", "start"])
+    except subprocess.CalledProcessError, e:
+        hookenv.action_fail("Failed to start service mysql. %s" % e)
+        sys.exit(-2)
+        
+
