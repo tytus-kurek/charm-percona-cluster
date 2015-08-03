@@ -1,0 +1,4 @@
+pause:
+  description: Pause Percona.
+resume:
+  description: Resume Percona.
