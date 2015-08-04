@@ -6,18 +6,8 @@ from charmhelpers.core import hookenv
 from charmhelpers.core import host
 
 if __name__ == "__main__":
-    override_path = '/etc/init/mysql.override'
-    if os.path.exists(override_path):
-        try:
-            os.remove(override_path)
-        except OSError, e:
-            hookenv.action_fail("Error removing override file: %s\n" % e)
-            sys.exit(-1)
-    else:
-        print "No override file."
-
-    if not host.service_start("mysql"):
+    if not host.service_resume("mysql"):
         hookenv.action_fail("Failed to start service mysql.")
-        sys.exit(-2)
+        sys.exit(-1)
         
 

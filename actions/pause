@@ -5,13 +5,6 @@ from charmhelpers.core import hookenv
 from charmhelpers.core import host
 
 if __name__ == "__main__":
-    if not host.service_stop("mysql"):
+    if not host.service_pause("mysql"):
         hookenv.action_fail("Failed to stop service mysql.")
         sys.exit(-1)        
-    try:
-        override_file = open('/etc/init/mysql.override', 'w')
-    except IOError, e:
-        hookenv.action_fail("Error creating override file: %s\n" % e)
-        sys.exit(-2)
-    override_file.write("manual\n")
-    override_file.close()
