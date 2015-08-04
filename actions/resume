@@ -3,8 +3,8 @@ import os
 import subprocess
 import sys
 
-from charmhelpers.core.hookenv import action_fail
-from charmhelpers.core.host import service_start
+from charmhelpers.core import hookenv
+from charmhelpers.core import host
 
 if __name__ == "__main__":
     override_path = '/etc/init/mysql.override'
@@ -12,13 +12,13 @@ if __name__ == "__main__":
         try:
             os.remove(override_path)
         except OSError, e:
-            action_fail("Error removing override file: %s\n" % e)
+            hookenv.action_fail("Error removing override file: %s\n" % e)
             sys.exit(-1)
     else:
         print "No override file."
 
-    if not service_start("mysql"):
-        action_fail("Failed to start service mysql.")
+    if not host.service_start("mysql"):
+        hookenv.action_fail("Failed to start service mysql.")
         sys.exit(-2)
         
 
