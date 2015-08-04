@@ -1,20 +1,17 @@
 #!/usr/bin/python
-import subprocess
 import sys
 
-from charmhelpers.core import hookenv
+from charmhelpers.core.hookenv import action_fail
+from charhelplers.core.host import service_stop
 
 if __name__ == "__main__":
-    try:
-        subprocess.check_call(["/usr/sbin/service", "mysql", "stop"])
-    except (OSError, subprocess.CalledProcessError), e:
-        hookenv.action_fail("Failed to stop service mysql. %s" % e)
+    if not service_stop("mysql"):
+        action_fail("Failed to stop service mysql.")
         sys.exit(-1)        
     try:
         override_file = open('/etc/init/mysql.override', 'w')
     except IOError, e:
-        hookenv.action_fail(
-            "Error creating override file: %s\n" % e)
+        action_fail("Error creating override file: %s\n" % e)
         sys.exit(-2)
     override_file.write("manual\n")
     override_file.close()
