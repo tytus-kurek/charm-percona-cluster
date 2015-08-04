@@ -2,7 +2,7 @@
 import sys
 
 from charmhelpers.core import hookenv
-from charmhelplers.core import host
+from charmhelpers.core import host
 
 if __name__ == "__main__":
     if not host.service_stop("mysql"):
