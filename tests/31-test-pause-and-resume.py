@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# test precona-cluster pause and resume
+# test percona-cluster pause and resume
 
 import subprocess
 import time
