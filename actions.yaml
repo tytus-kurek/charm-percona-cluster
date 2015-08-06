@@ -1,4 +1,4 @@
 pause:
-  description: Pause Percona.
+  description: Pause the MySQL service.
 resume:
-  description: Resume Percona.
+  description: Resume the MySQL service.
