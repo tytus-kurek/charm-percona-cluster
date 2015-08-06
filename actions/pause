@@ -1,8 +1,7 @@
 #!/usr/bin/python
 import sys
 
-from charmhelpers.core import hookenv
-from charmhelpers.core import host
+from charmhelpers.core import hookenv, host
 
 if __name__ == "__main__":
     if not host.service_pause("mysql"):
