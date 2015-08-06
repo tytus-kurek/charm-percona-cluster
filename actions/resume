@@ -6,7 +6,7 @@ from charmhelpers.core import hookenv, host
 
 if __name__ == "__main__":
     if not host.service_resume("mysql"):
-        hookenv.action_fail("Failed to start service mysql.")
+        hookenv.action_fail("Failed to resume MySQL service.")
         sys.exit(-1)
         
 
