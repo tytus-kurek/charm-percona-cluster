@@ -15,10 +15,7 @@ class PauseResume(basic_deployment.BasicDeployment):
         command = ["juju", "action", "do", unit_id, action]
         command.extend(args)
         print("Running command: %s\n" % " ".join(command))
-        try:
-            output = subprocess.check_output(command)
-        except Exception as e:
-            print("Fedge: %s, %s\n" % (e, output))
+        output = subprocess.check_output(command)
         parts = output.strip().split()
         action_id = parts[-1]
         return action_id
