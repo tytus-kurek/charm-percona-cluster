@@ -2,9 +2,10 @@
 # test percona-cluster pause and resume
 
 import subprocess
+import sys
 import time
 
-import yaml
+import json
 
 import basic_deployment
 
@@ -12,27 +13,28 @@ import basic_deployment
 class PauseResume(basic_deployment.BasicDeployment):
 
     def _run_action(self, unit_id, action, *args):
-        command = ["juju", "action", "do", unit_id, action]
+        command = ["juju", "action", "do", "--format=json", unit_id, action]
         command.extend(args)
         print("Running command: %s\n" % " ".join(command))
         output = subprocess.check_output(command)
-        parts = output.strip().split()
-        action_id = parts[-1]
+        output_json = output.decode(encoding="UTF-8")
+        data = json.loads(output_json)
+        action_id = data[u'Action queued with id']
         return action_id
 
     def _wait_on_action(self, action_id):
-        command = ["juju", "action", "fetch", action_id]
+        command = ["juju", "action", "fetch", "--format=json", action_id]
         while True:
             try:
                 output = subprocess.check_output(command)
             except Exception as e:
                 print(e)
                 return False
-
-            data = yaml.safe_load(output)
-            if data["status"] == "completed":
+            output_json = output.decode(encoding="UTF-8")
+            data = json.loads(output_json)
+            if data[u"status"] == "completed":
                 return True
-            elif data["status"] == "failed":
+            elif data[u"status"] == "failed":
                 return False
             time.sleep(2)
 
