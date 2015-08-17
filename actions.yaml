@@ -1,0 +1,4 @@
+pause:
+  description: Pause the MySQL service.
+resume:
+  description: Resume the MySQL service.
