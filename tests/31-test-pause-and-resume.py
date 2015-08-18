@@ -8,7 +8,7 @@ import time
 import json
 
 import basic_deployment
-from charmhelpers.contrib.amulet import AmuletUtils
+from charmhelpers.contrib.amulet.utils import AmuletUtils
 
 utils = AmuletUtils()
 
