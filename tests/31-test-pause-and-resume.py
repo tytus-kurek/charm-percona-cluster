@@ -19,7 +19,7 @@ class PauseResume(basic_deployment.BasicDeployment):
         unit_name = "percona-cluster/0"
         unit = self.d.sentry.unit[unit_name]
         assert self.is_mysqld_running(unit=unit), "mysqld not running in initial state."
-        action_id = utils.run_action(self.d.sentry, "pause")
+        action_id = utils.run_action(unit, "pause")
         assert utils.wait_on_action(action_id), "Pause action failed."
 
         # Note that is_mysqld_running will print an error message when
@@ -29,7 +29,7 @@ class PauseResume(basic_deployment.BasicDeployment):
         init_contents = unit.directory_contents("/etc/init/")
         assert "mysql.override" in init_contents["files"], "Override file not created."
 
-        action_id = utils.run_action(self.d.sentry, "resume")
+        action_id = utils.run_action(unit, "resume")
         assert utils.wait_on_action(action_id), "Resume action failed"
         init_contents = unit.directory_contents("/etc/init/")
         assert "mysql.override" not in init_contents["files"], "Override file not removed."
