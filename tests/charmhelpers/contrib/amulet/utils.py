@@ -589,7 +589,7 @@ class AmuletUtils(object):
 
         _check_output parameter is used for dependency injection.
         """
-        command = ["juju", "action", "fetch", "--format=json", "--wait=0",
+        command = ["juju", "action", "fetch", "--format=json",
                    action_id]
         output = _check_output(command, universal_newlines=True)
         data = json.loads(output)
