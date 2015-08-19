@@ -593,4 +593,7 @@ class AmuletUtils(object):
                    action_id]
         output = _check_output(command, universal_newlines=True)
         data = json.loads(output)
-        return data.get(u"status") == "completed"
+        status = data.get(u"status")
+        print("STATUS = %s" % status)
+        return status == "completed"
+        
