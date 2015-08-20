@@ -12,13 +12,13 @@ from charmhelpers.contrib.amulet.utils import AmuletUtils
 
 utils = AmuletUtils()
 
-
-
 class PauseResume(basic_deployment.BasicDeployment):
 
     def run(self):
+        super(PauseResume, self).run()
         uid = 'percona-cluster/0'
         unit = self.d.sentry.unit[uid]
+        assert self.is_mysqld_running(unit), 'mysql not running: %s' % uid
         action_id = utils.run_action(unit, "pause")
         assert utils.wait_on_action(action_id), "Pause action failed."
 
