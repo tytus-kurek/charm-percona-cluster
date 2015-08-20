@@ -17,7 +17,6 @@ utils = AmuletUtils()
 class PauseResume(basic_deployment.BasicDeployment):
 
     def run(self):
-        super(PauseResume, self).run()
         for i in range(self.units):
             uid = 'percona-cluster/%d' % i
             unit = self.d.sentry.unit[uid]
