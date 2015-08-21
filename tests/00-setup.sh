@@ -10,10 +10,9 @@ if [ $? -ne 0 ]; then
   sudo apt-get install -y -q amulet juju-core charm-tools
 fi
 
-
-PACKAGES="python3 python3-yaml python3-distro-info"
+PACKAGES="python3 python3-yaml python-cinderclient python-distro-info python-glanceclient python-heatclient python-keystoneclient python-neutronclient python-novaclient python-pika python-swiftclient"
 for pkg in $PACKAGES; do
-  dpkg -s python3
+  dpkg -s $pkg
   if [ $? -ne 0 ]; then
     sudo apt-get install -y -q $pkg
   fi
