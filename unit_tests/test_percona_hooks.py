@@ -36,6 +36,7 @@ class TestHaRelation(CharmTestCase):
         self.get_db_helper.return_value = helper
         self.test_config.set('vip', '10.0.3.3')
         self.test_config.set('sst-password', password)
+
         def f(k):
             return self.test_config.get(k)
 
@@ -48,12 +49,12 @@ class TestHaRelation(CharmTestCase):
                                              'cidr_netmask="24" '
                                              'nic="eth0"'),
                            'res_mysql_monitor':
-                               hooks.RES_MONITOR_PARAMS % {'sstpass': 'ubuntu'}}
+                           hooks.RES_MONITOR_PARAMS % {'sstpass': 'ubuntu'}}
         groups = {'grp_percona_cluster': 'res_mysql_vip'}
 
         clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
 
-        colocations = {'vip_mysqld': 'inf: grp_percona_cluster cl_mysql_monitor'}
+        colocations = {'vip_mysqld': 'inf: grp_percona_cluster cl_mysql_monitor'}  # noqa
 
         locations = {'loc_percona_cluster':
                      'grp_percona_cluster rule inf: writable eq 1'}

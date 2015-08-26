@@ -100,7 +100,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
             resources = ['res_mysql_vip']
             resources += ['res_mysql_monitor:%d' %
-                          i for i in range(self.units)]
+                          m for m in range(self.units)]
 
             assert sorted(self.get_pcmkr_resources()) == sorted(resources)
         else:
