@@ -5,7 +5,7 @@ description: |
   Percona XtraDB Cluster provides an active/active MySQL
   compatible alternative implemented using the Galera
   synchronous replication extensions.
-categories:
+tags:
   - databases
 provides:
   db:
