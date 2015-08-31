@@ -111,8 +111,8 @@ class UtilsTests(unittest.TestCase):
                                     mock_log, mock_get_ipv6_addr):
         ipv6addr = '2001:db8:1:0:f816:3eff:fe79:cd'
         mock_get_ipv6_addr.return_value = [ipv6addr]
-        mock_rel_ids.return_value = [1,2]
-        mock_rel_units.return_value = [3,4]
+        mock_rel_ids.return_value = [1, 2]
+        mock_rel_units.return_value = [3, 4]
         mock_get_host_ip.return_value = 'hostA'
 
         def _mock_rel_get(*args, **kwargs):
