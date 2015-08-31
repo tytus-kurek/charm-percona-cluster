@@ -3,18 +3,17 @@ PYTHON := /usr/bin/env python
 export PYTHONPATH := hooks
 
 lint:
-	@flake8 --exclude hooks/charmhelpers hooks
+	@flake8 --exclude hooks/charmhelpers,tests/charmhelpers \
+        hooks unit_tests tests
 	@charm proof
 
-unit_test:
-	@$(PYTHON) /usr/bin/nosetests --nologcapture unit_tests
-
 test:
+	@# Bundletester expects unit tests here.
+	@$(PYTHON) /usr/bin/nosetests -v --nologcapture --with-coverage unit_tests
+
+functional_test:
 	@echo Starting amulet tests...
-	#NOTE(beisner): can remove -v after bug 1320357 is fixed
-	#   https://bugs.launchpad.net/amulet/+bug/1320357
 	@juju test -v -p AMULET_HTTP_PROXY,AMULET_OS_VIP --timeout 2700
-	#echo "Tests disables; http://pad.lv/1446169"
 
 bin/charm_helpers_sync.py:
 	@mkdir -p bin
@@ -22,8 +21,8 @@ bin/charm_helpers_sync.py:
         > bin/charm_helpers_sync.py
 
 sync: bin/charm_helpers_sync.py
-	@$(PYTHON) bin/charm_helpers_sync.py -c charm-helpers.yaml
+	@$(PYTHON) bin/charm_helpers_sync.py -c charm-helpers-hooks.yaml
 	@$(PYTHON) bin/charm_helpers_sync.py -c charm-helpers-tests.yaml
 
-publish: lint
+publish: lint test
 	bzr push lp:charms/trusty/percona-cluster
