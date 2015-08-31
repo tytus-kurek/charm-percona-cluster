@@ -1,16 +1,12 @@
 #!/usr/bin/python3
-# test percona-cluster pause and resume
-
-import subprocess
-import sys
-import time
-
-import json
+# test percona-cluster pause and resum
 
 import basic_deployment
 from charmhelpers.contrib.amulet.utils import AmuletUtils
 
+
 utils = AmuletUtils()
+
 
 class PauseResume(basic_deployment.BasicDeployment):
 
@@ -25,15 +21,19 @@ class PauseResume(basic_deployment.BasicDeployment):
         # Note that is_mysqld_running will print an error message when
         # mysqld is not running.  This is by design but it looks odd
         # in the output.
-        assert not self.is_mysqld_running(unit=unit), "mysqld is still running!"
+        assert not self.is_mysqld_running(unit=unit), \
+            "mysqld is still running!"
         init_contents = unit.directory_contents("/etc/init/")
-        assert "mysql.override" in init_contents["files"], "Override file not created."
+        assert "mysql.override" in init_contents["files"], \
+            "Override file not created."
 
         action_id = utils.run_action(unit, "resume")
         assert utils.wait_on_action(action_id), "Resume action failed"
         init_contents = unit.directory_contents("/etc/init/")
-        assert "mysql.override" not in init_contents["files"], "Override file not removed."
-        assert self.is_mysqld_running(unit=unit), "mysqld not running after resume."
+        assert "mysql.override" not in init_contents["files"], \
+            "Override file not removed."
+        assert self.is_mysqld_running(unit=unit), \
+            "mysqld not running after resume."
 
 
 if __name__ == "__main__":
