@@ -16,9 +16,11 @@ class PauseResume(basic_deployment.BasicDeployment):
         uid = 'percona-cluster/0'
         unit = self.d.sentry.unit[uid]
         assert self.is_mysqld_running(unit), 'mysql not running: %s' % uid
+        assert status_get()[0] == "unknown"
+        
         action_id = utils.run_action(unit, "pause")
         assert utils.wait_on_action(action_id), "Pause action failed."
-        assert status_get() == "maintenance"
+
 
         # Note that is_mysqld_running will print an error message when
         # mysqld is not running.  This is by design but it looks odd
@@ -28,10 +30,10 @@ class PauseResume(basic_deployment.BasicDeployment):
         init_contents = unit.directory_contents("/etc/init/")
         assert "mysql.override" in init_contents["files"], \
             "Override file not created."
-
+        assert status_get()[0] == "maintenance"
         action_id = utils.run_action(unit, "resume")
         assert utils.wait_on_action(action_id), "Resume action failed"
-        assert status_get() == "active"
+        assert status_get()[0] == "active"
         init_contents = unit.directory_contents("/etc/init/")
         assert "mysql.override" not in init_contents["files"], \
             "Override file not removed."
