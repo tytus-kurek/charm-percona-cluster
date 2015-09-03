@@ -1,11 +1,18 @@
 #!/usr/bin/python3
 # test percona-cluster pause and resum
 
-import time
-
 import basic_deployment
 from charmhelpers.contrib.amulet.utils import AmuletUtils
-from charmhelpers.core.hookenv import status_get
+# from charmhelpers.core.hookenv import status_get
+
+def status_get():
+    import subprocess
+    import json
+    cmd = ["juju", "run", "--unit", "percona-cluster/0",
+           "'status-get --format=json'"]
+    raw_status = subprocess.check_output(cmd)
+    status = json.loads(raw_status.decode("UTF-8"))
+    return (status["status"], status["message"])
 
 
 utils = AmuletUtils()
@@ -33,7 +40,6 @@ class PauseResume(basic_deployment.BasicDeployment):
         assert "mysql.override" in init_contents["files"], \
             "Override file not created."
 
-        time.sleep(10)
         assert status_get()[0] == "maintenance"
         action_id = utils.run_action(unit, "resume")
         assert utils.wait_on_action(action_id), "Resume action failed"
