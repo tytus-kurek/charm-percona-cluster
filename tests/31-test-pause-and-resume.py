@@ -5,15 +5,20 @@ import basic_deployment
 from charmhelpers.contrib.amulet.utils import AmuletUtils
 # from charmhelpers.core.hookenv import status_get
 
-def status_get():
-    import subprocess
+def status_get(sentry):
     import json
-    cmd = ["juju", "run", "--unit", "percona-cluster/0",
-           "'status-get --format=json'"]
-    raw_status = subprocess.check_output(cmd)
+    raw_status = sentry.run(["status-get", "--format=json"])
     status = json.loads(raw_status.decode("UTF-8"))
     return (status["status"], status["message"])
 
+    # import subprocess
+    # import json
+    # cmd = ["juju", "run", "--unit", "percona-cluster/0",
+    #        "'status-get'"]
+    # raw_status = subprocess.check_output(cmd)
+    # # status = json.loads(raw_status.decode("UTF-8"))
+    # status = raw_status.decode("UTF-8")
+    # return (status["status"], "")
 
 utils = AmuletUtils()
 
