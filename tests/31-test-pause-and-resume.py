@@ -7,7 +7,7 @@ from charmhelpers.contrib.amulet.utils import AmuletUtils
 
 def status_get(unit):
     import json
-    raw_status = unit.run(["status-get", "--format=json"])
+    raw_status = unit.run("status-get --format=json")
     status = json.loads(raw_status.decode("UTF-8"))
     return (status["status"], status["message"])
 
