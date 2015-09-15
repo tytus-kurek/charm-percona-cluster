@@ -12,7 +12,6 @@ TO_PATCH = ['log', 'config',
             'update_nrpe_config']
 
 
-
 class TestHaRelation(CharmTestCase):
     def setUp(self):
         CharmTestCase.setUp(self, hooks, TO_PATCH)
