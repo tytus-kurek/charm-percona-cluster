@@ -15,10 +15,9 @@ class PauseResume(basic_deployment.BasicDeployment):
         unit = self.d.sentry.unit[uid]
         assert self.is_mysqld_running(unit), 'mysql not running: %s' % uid
         assert utils.status_get(unit)[0] == "unknown"
-        
+
         action_id = utils.run_action(unit, "pause")
         assert utils.wait_on_action(action_id), "Pause action failed."
-
 
         # Note that is_mysqld_running will print an error message when
         # mysqld is not running.  This is by design but it looks odd
