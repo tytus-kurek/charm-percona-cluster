@@ -25,17 +25,11 @@ class PauseResume(basic_deployment.BasicDeployment):
         # in the output.
         assert not self.is_mysqld_running(unit=unit), \
             "mysqld is still running!"
-        init_contents = unit.directory_contents("/etc/init/")
-        assert "mysql.override" in init_contents["files"], \
-            "Override file not created."
 
         assert utils.status_get(unit)[0] == "maintenance"
         action_id = utils.run_action(unit, "resume")
         assert utils.wait_on_action(action_id), "Resume action failed"
         assert utils.status_get(unit)[0] == "active"
-        init_contents = unit.directory_contents("/etc/init/")
-        assert "mysql.override" not in init_contents["files"], \
-            "Override file not removed."
         assert self.is_mysqld_running(unit=unit), \
             "mysqld not running after resume."
 
