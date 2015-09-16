@@ -8,7 +8,8 @@ import percona_hooks as hooks
 TO_PATCH = ['log', 'config',
             'get_db_helper',
             'relation_ids',
-            'relation_set']
+            'relation_set',
+            'update_nrpe_config']
 
 
 class TestHaRelation(CharmTestCase):
