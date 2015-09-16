@@ -278,6 +278,9 @@ def config_changed():
         # make sure all the HA resources are (re)created
         ha_relation_joined()
 
+    if is_relation_made('nrpe-external-master'):
+        update_nrpe_config()
+
 
 @hooks.hook('cluster-relation-joined')
 def cluster_joined():
