@@ -47,7 +47,7 @@ KEY = "keys/repo.percona.com"
 REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
 MY_CNF = "/etc/mysql/my.cnf"
-SEEDED_MARKER = "/var/lib/mysql/seeded"
+SEEDED_MARKER = "{data_dir}/seeded"
 HOSTS_FILE = '/etc/hosts'
 
 
@@ -69,12 +69,13 @@ def determine_packages():
 
 def seeded():
     ''' Check whether service unit is already seeded '''
-    return os.path.exists(SEEDED_MARKER)
+    return os.path.exists(SEEDED_MARKER.format(data_dir=resolve_data_dir()))
 
 
 def mark_seeded():
     ''' Mark service unit as seeded '''
-    with open(SEEDED_MARKER, 'w') as seeded:
+    with open(SEEDED_MARKER.format(data_dir=resolve_data_dir()),
+              'w') as seeded:
         seeded.write('done')
 
 
@@ -360,3 +361,12 @@ def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
         (cluster_uuid), DEBUG)
     for rid in rids:
         relation_set(relation_id=rid, **{'bootstrap-uuid': cluster_uuid})
+
+
+def resolve_data_dir():
+    if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
+        return '/var/lib/mysql'
+    else:
+        return '/var/lib/percona'
+
+
