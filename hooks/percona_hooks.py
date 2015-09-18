@@ -114,6 +114,11 @@ def render_config(clustered=False, hosts=[]):
     if not os.path.exists(os.path.dirname(MY_CNF)):
         os.makedirs(os.path.dirname(MY_CNF))
 
+    if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
+        data_dir = '/var/lib/mysql'
+    else:
+        data_dir = '/var/lib/percona'
+
     context = {
         'cluster_name': 'juju_cluster',
         'private_address': get_host_ip(),
@@ -123,7 +128,8 @@ def render_config(clustered=False, hosts=[]):
         'sst_password': config('sst-password'),
         'innodb_file_per_table': config('innodb-file-per-table'),
         'table_open_cache': config('table-open-cache'),
-        'lp1366997_workaround': config('lp1366997-workaround')
+        'lp1366997_workaround': config('lp1366997-workaround'),
+        'data_dir': data_dir,
     }
 
     if config('prefer-ipv6'):
