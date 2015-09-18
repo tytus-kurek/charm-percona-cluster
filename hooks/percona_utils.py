@@ -367,6 +367,6 @@ def resolve_data_dir():
     if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
         return '/var/lib/mysql'
     else:
-        return '/var/lib/percona'
+        return '/var/lib/percona-xtradb-cluster'
 
 
