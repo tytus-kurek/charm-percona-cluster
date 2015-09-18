@@ -25,7 +25,7 @@ bind-address = 0.0.0.0
 # * Fine Tuning
 #
 key_buffer              = {{ key_buffer }}
-table_open_cache 		= {{ table_open_cache }}
+table_open_cache        = {{ table_open_cache }}
 max_allowed_packet      = 16M
 thread_stack            = 192K
 thread_cache_size       = 8
