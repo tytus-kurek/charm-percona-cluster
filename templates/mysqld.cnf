@@ -76,8 +76,6 @@ innodb_file_per_table = 1
 innodb_file_per_table = 0
 {% endif %}
 
-# InnoDB buffer should consume 100% of the bytes of the dataset size
-# query cache is not supported with Active/Active configuration
 innodb_buffer_pool_size = {{ innodb_buffer_pool_size }}
 
 #
