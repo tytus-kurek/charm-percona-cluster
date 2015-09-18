@@ -366,14 +366,14 @@ def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
 @cached
 def resolve_data_dir():
     if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
-        '/var/lib/mysql'
+        return '/var/lib/mysql'
     else:
-        '/var/lib/percona-xtradb-cluster'
+        return '/var/lib/percona-xtradb-cluster'
 
 
 @cached
 def resolve_cnf_file():
     if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
-        '/etc/mysql/my.cnf'
+        return '/etc/mysql/my.cnf'
     else:
-        '/etc/mysql/percona-xtradb-cluster.conf.d/mysqld.cnf'
+        return '/etc/mysql/percona-xtradb-cluster.conf.d/mysqld.cnf'
