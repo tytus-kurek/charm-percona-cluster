@@ -25,6 +25,7 @@ from charmhelpers.core.hookenv import (
     INFO,
     WARNING,
     ERROR,
+    cached,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -46,7 +47,6 @@ from MySQLdb import (
 KEY = "keys/repo.percona.com"
 REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
-MY_CNF = "/etc/mysql/my.cnf"
 SEEDED_MARKER = "{data_dir}/seeded"
 HOSTS_FILE = '/etc/hosts'
 
@@ -363,10 +363,17 @@ def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
         relation_set(relation_id=rid, **{'bootstrap-uuid': cluster_uuid})
 
 
+@cached
 def resolve_data_dir():
     if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
-        return '/var/lib/mysql'
+        '/var/lib/mysql'
     else:
-        return '/var/lib/percona-xtradb-cluster'
+        '/var/lib/percona-xtradb-cluster'
 
 
+@cached
+def resolve_cnf_file():
+    if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
+        '/etc/mysql/my.cnf'
+    else:
+        '/etc/mysql/percona-xtradb-cluster.conf.d/mysqld.cnf'
