@@ -429,12 +429,23 @@ def shared_db_changed(relation_id=None, unit=None):
     access_network = config('access-network')
     db_helper = get_db_helper()
 
+    peer_store_and_set(relation_id=relation_id,
+                       relation_settings={'access-network': access_network})
+
     singleset = set(['database', 'username', 'hostname'])
     if singleset.issubset(settings):
         # Process a single database configuration
         hostname = settings['hostname']
         database = settings['database']
         username = settings['username']
+
+        normalized_address = db_helper.normalize_address(hostname)
+        if access_network and not is_address_in_network(access_network,
+                                                        normalized_address):
+            # NOTE: for configurations using access-network, only setup database
+            #       access if remote unit has presented a hostname or ip address
+            #       thats within the configured network cidr
+            return
 
         # NOTE: do this before querying access grants
         password = configure_db_for_hosts(hostname, database, username,
@@ -485,6 +496,16 @@ def shared_db_changed(relation_id=None, unit=None):
                 hostname = databases[db]['hostname']
                 username = databases[db]['username']
 
+                normalized_address = db_helper.normalize_address(hostname)
+                if (access_network and
+                        not is_address_in_network(access_network,
+                                                  normalized_address)):
+                    # NOTE: for configurations using access-network,
+                    #       only setup database access if remote unit
+                    #       has presented a hostname or ip address
+                    #       thats within the configured network cidr
+                    return
+
                 # NOTE: do this before querying access grants
                 password = configure_db_for_hosts(hostname, database, username,
                                                   db_helper)
@@ -508,9 +529,6 @@ def shared_db_changed(relation_id=None, unit=None):
                                **return_data)
         else:
             log("No return data - not setting relation settings", level=DEBUG)
-
-    peer_store_and_set(relation_id=relation_id,
-                       relation_settings={'access-network': access_network})
 
 
 @hooks.hook('ha-relation-joined')
