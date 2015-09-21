@@ -439,7 +439,7 @@ def shared_db_changed(relation_id=None, unit=None):
         database = settings['database']
         username = settings['username']
 
-        normalized_address = db_helper.normalize_address(hostname)
+        normalized_address = get_host_ip(hostname)
         if access_network and not is_address_in_network(access_network,
                                                         normalized_address):
             # NOTE: for configurations using access-network, only setup database
@@ -496,7 +496,7 @@ def shared_db_changed(relation_id=None, unit=None):
                 hostname = databases[db]['hostname']
                 username = databases[db]['username']
 
-                normalized_address = db_helper.normalize_address(hostname)
+                normalized_address = get_host_ip(hostname)
                 if (access_network and
                         not is_address_in_network(access_network,
                                                   normalized_address)):
