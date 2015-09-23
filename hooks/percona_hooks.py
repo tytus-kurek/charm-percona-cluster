@@ -93,7 +93,7 @@ RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
                       'OCF_CHECK_LEVEL="1"')
 
 
-@hooks.hook('install')
+@hooks.hook('install.real')
 def install():
     execd_preinstall()
     if config('source') is None and \
