@@ -9,7 +9,9 @@ TO_PATCH = ['log', 'config',
             'get_db_helper',
             'relation_ids',
             'relation_set',
-            'update_nrpe_config']
+            'update_nrpe_config',
+            'get_iface_for_address',
+            'get_netmask_for_address']
 
 
 class TestHaRelation(CharmTestCase):
@@ -35,6 +37,8 @@ class TestHaRelation(CharmTestCase):
         attrs = {'get_mysql_password.return_value': password}
         helper.configure_mock(**attrs)
         self.get_db_helper.return_value = helper
+        self.get_netmask_for_address.return_value = '24'
+        self.get_iface_for_address.return_value = 'eth0'
         self.test_config.set('vip', '10.0.3.3')
         self.test_config.set('sst-password', password)
 

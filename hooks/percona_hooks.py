@@ -75,6 +75,7 @@ from charmhelpers.contrib.hahelpers.cluster import (
 from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
+    get_iface_for_address,
     get_netmask_for_address,
     get_ipv6_addr,
     is_address_in_network,
@@ -535,8 +536,8 @@ def shared_db_changed(relation_id=None, unit=None):
 @hooks.hook('ha-relation-joined')
 def ha_relation_joined():
     vip = config('vip')
-    vip_iface = config('vip_iface')
-    vip_cidr = config('vip_cidr')
+    vip_iface = get_iface_for_address(vip) or config('vip_iface')
+    vip_cidr = get_netmask_for_address(vip) or config('vip_cidr')
     corosync_bindiface = config('ha-bindiface')
     corosync_mcastport = config('ha-mcastport')
 
@@ -547,7 +548,7 @@ def ha_relation_joined():
     if config('prefer-ipv6'):
         res_mysql_vip = 'ocf:heartbeat:IPv6addr'
         vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
-                     (vip, get_netmask_for_address(vip), vip_iface)
+                     (vip, vip_cidr, vip_iface)
     else:
         res_mysql_vip = 'ocf:heartbeat:IPaddr2'
         vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
