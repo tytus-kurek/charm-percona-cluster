@@ -107,14 +107,6 @@ wsrep_sst_auth="sstuser:{{ sst_password }}"
 wsrep_provider_options = {{ wsrep_provider_options }}
 {% endif %}
 
-{% if lp1366997_workaround -%}
-# Adding workaround for bug:
-#    https://bugs.launchpad.net/charms/+source/percona-cluster/+bug/1366997
-# Note that this should only be required for percona 5.5
-wsrep_drupal_282555_workaround = ON
-wsrep_retry_autocommit = 100
-{% endif %}
-
 #
 # * IPv6 SST configuration
 #
