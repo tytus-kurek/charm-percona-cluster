@@ -70,7 +70,7 @@ class TestHaRelation(CharmTestCase):
             resource_params=resource_params, groups=groups,
             clones=clones, colocations=colocations, locations=locations)
 
-    def test_resources_vip_cidr_iface_autodetection(self):
+    def test_resource_params_vip_cidr_iface_autodetection(self):
         """
         Auto-detected values for vip_cidr and vip_iface are used to configure
         VIPs, even when explicit config options are provided.
@@ -90,8 +90,6 @@ class TestHaRelation(CharmTestCase):
         self.config.side_effect = f
         hooks.ha_relation_joined()
 
-        resources = {'res_mysql_vip': 'ocf:heartbeat:IPaddr2',
-                     'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
         resource_params = {'res_mysql_vip': ('params ip="10.0.3.3" '
                                              'cidr_netmask="20" '
                                              'nic="eth1"'),
@@ -99,10 +97,9 @@ class TestHaRelation(CharmTestCase):
                            hooks.RES_MONITOR_PARAMS % {'sstpass': 'None'}}
 
         call_args, call_kwargs = self.relation_set.call_args
-        self.assertEqual(resources, call_kwargs['resources'])
         self.assertEqual(resource_params, call_kwargs['resource_params'])
 
-    def test_resources_no_vip_cidr_iface_autodetection(self):
+    def test_resource_params_no_vip_cidr_iface_autodetection(self):
         """
         When autodetecting vip_cidr and vip_iface fails, values from
         vip_cidr and vip_iface config options are used instead.
@@ -122,8 +119,6 @@ class TestHaRelation(CharmTestCase):
         self.config.side_effect = f
         hooks.ha_relation_joined()
 
-        resources = {'res_mysql_vip': 'ocf:heartbeat:IPaddr2',
-                     'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
         resource_params = {'res_mysql_vip': ('params ip="10.0.3.3" '
                                              'cidr_netmask="16" '
                                              'nic="eth1"'),
@@ -131,5 +126,4 @@ class TestHaRelation(CharmTestCase):
                            hooks.RES_MONITOR_PARAMS % {'sstpass': 'None'}}
 
         call_args, call_kwargs = self.relation_set.call_args
-        self.assertEqual(resources, call_kwargs['resources'])
         self.assertEqual(resource_params, call_kwargs['resource_params'])
