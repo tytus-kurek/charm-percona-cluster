@@ -37,8 +37,8 @@ class TestHaRelation(CharmTestCase):
         attrs = {'get_mysql_password.return_value': password}
         helper.configure_mock(**attrs)
         self.get_db_helper.return_value = helper
-        self.get_netmask_for_address.return_value = '24'
-        self.get_iface_for_address.return_value = 'eth0'
+        self.get_netmask_for_address.return_value = None
+        self.get_iface_for_address.return_value = None
         self.test_config.set('vip', '10.0.3.3')
         self.test_config.set('sst-password', password)
 
@@ -69,3 +69,67 @@ class TestHaRelation(CharmTestCase):
             corosync_mcastport=f('ha-mcastport'), resources=resources,
             resource_params=resource_params, groups=groups,
             clones=clones, colocations=colocations, locations=locations)
+
+    def test_resources_vip_cidr_iface_autodetection(self):
+        """
+        Auto-detected values for vip_cidr and vip_iface are used to configure
+        VIPs, even when explicit config options are provided.
+        """
+        self.relation_ids.return_value = ['ha:1']
+        helper = mock.Mock()
+        self.get_db_helper.return_value = helper
+        self.get_netmask_for_address.return_value = '20'
+        self.get_iface_for_address.return_value = 'eth1'
+        self.test_config.set('vip', '10.0.3.3')
+        self.test_config.set('vip_cidr', '16')
+        self.test_config.set('vip_iface', 'eth0')
+
+        def f(k):
+            return self.test_config.get(k)
+
+        self.config.side_effect = f
+        hooks.ha_relation_joined()
+
+        resources = {'res_mysql_vip': 'ocf:heartbeat:IPaddr2',
+                     'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
+        resource_params = {'res_mysql_vip': ('params ip="10.0.3.3" '
+                                             'cidr_netmask="20" '
+                                             'nic="eth1"'),
+                           'res_mysql_monitor':
+                           hooks.RES_MONITOR_PARAMS % {'sstpass': 'None'}}
+
+        call_args, call_kwargs = self.relation_set.call_args
+        self.assertEqual(resources, call_kwargs['resources'])
+        self.assertEqual(resource_params, call_kwargs['resource_params'])
+
+    def test_resources_no_vip_cidr_iface_autodetection(self):
+        """
+        When autodetecting vip_cidr and vip_iface fails, values from
+        vip_cidr and vip_iface config options are used instead.
+        """
+        self.relation_ids.return_value = ['ha:1']
+        helper = mock.Mock()
+        self.get_db_helper.return_value = helper
+        self.get_netmask_for_address.return_value = None
+        self.get_iface_for_address.return_value = None
+        self.test_config.set('vip', '10.0.3.3')
+        self.test_config.set('vip_cidr', '16')
+        self.test_config.set('vip_iface', 'eth1')
+
+        def f(k):
+            return self.test_config.get(k)
+
+        self.config.side_effect = f
+        hooks.ha_relation_joined()
+
+        resources = {'res_mysql_vip': 'ocf:heartbeat:IPaddr2',
+                     'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
+        resource_params = {'res_mysql_vip': ('params ip="10.0.3.3" '
+                                             'cidr_netmask="16" '
+                                             'nic="eth1"'),
+                           'res_mysql_monitor':
+                           hooks.RES_MONITOR_PARAMS % {'sstpass': 'None'}}
+
+        call_args, call_kwargs = self.relation_set.call_args
+        self.assertEqual(resources, call_kwargs['resources'])
+        self.assertEqual(resource_params, call_kwargs['resource_params'])
