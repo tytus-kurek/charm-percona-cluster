@@ -9,6 +9,7 @@ from charmhelpers.core.hookenv import action_fail, status_set
 
 MYSQL_SERVICE = "mysql"
 
+
 def pause(args):
     """Pause the MySQL service.
 
@@ -18,6 +19,7 @@ def pause(args):
         raise Exception("Failed to pause MySQL service.")
     status_set(
         "maintenance", "Paused. Use 'resume' action to resume normal service.")
+
 
 def resume(args):
     """Resume the MySQL service.
@@ -48,4 +50,3 @@ def main(args):
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
-
