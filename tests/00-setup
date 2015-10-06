@@ -5,9 +5,9 @@ set -ex
 sudo add-apt-repository --yes ppa:juju/stable
 sudo apt-get update --yes
 sudo apt-get install --yes amulet \
+                           distro-info-data \
                            python-cinderclient \
                            python-distro-info \
-                           python3-distro-info \
                            python-glanceclient \
                            python-heatclient \
                            python-keystoneclient \
@@ -15,4 +15,3 @@ sudo apt-get install --yes amulet \
                            python-novaclient \
                            python-pika \
                            python-swiftclient
-
