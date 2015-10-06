@@ -11,6 +11,7 @@ packages:
     - distro-info-data
     - python-cinderclient
     - python-distro-info
+    - python3-distro-info
     - python-glanceclient
     - python-heatclient
     - python-keystoneclient
