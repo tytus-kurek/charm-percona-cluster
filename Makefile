@@ -4,7 +4,7 @@ export PYTHONPATH := hooks
 
 lint:
 	@flake8 --exclude hooks/charmhelpers,tests/charmhelpers \
-        hooks unit_tests tests
+        actions hooks unit_tests tests
 	@charm proof
 
 test:
