@@ -360,3 +360,13 @@ def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
         (cluster_uuid), DEBUG)
     for rid in rids:
         relation_set(relation_id=rid, **{'bootstrap-uuid': cluster_uuid})
+
+
+def cluster_in_sync():
+    '''Determines whether the current unit is in sync with the rest of the cluster'''
+    ready = get_wsrep_value('wsrep_ready') or False
+    sync_status = get_wsrep_value('wsrep_local_state') or 0
+    if ready and int(sync_status) == 4:
+        return True
+    return False
+
