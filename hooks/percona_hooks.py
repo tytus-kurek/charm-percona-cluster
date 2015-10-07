@@ -24,6 +24,7 @@ from charmhelpers.core.hookenv import (
     INFO,
     WARNING,
     is_leader,
+    status_set,
 )
 from charmhelpers.core.host import (
     service,
@@ -61,6 +62,7 @@ from percona_utils import (
     notify_bootstrapped,
     is_bootstrapped,
     get_wsrep_value,
+    cluster_in_sync,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -620,11 +622,27 @@ def update_nrpe_config():
     nrpe_setup.write()
 
 
+def assess_status():
+    '''Assess the status of the current unit'''
+    # Ensure that number of peers > cluster size configuration
+    if not is_bootstrapped():
+        status_set('blocked', 'Insufficient peers to bootstrap cluster')
+        return
+    # Once running, ensure that cluster is in sync and has the required peers
+    # will need to access mysql to determine status.
+    # Also check to see if hacluster has presented 'clustered' back yet
+    if is_bootstrapped() and cluster_in_sync():
+        status_set('active', 'Unit is ready and in sync')
+    else:
+        status_set('blocked', 'Unit is not in sync')
+
+
 def main():
     try:
         hooks.execute(sys.argv)
     except UnregisteredHookError as e:
         log('Unknown hook {} - skipping.'.format(e))
+    assess_status()
 
 
 if __name__ == '__main__':
