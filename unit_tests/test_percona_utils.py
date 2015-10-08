@@ -160,3 +160,23 @@ class UtilsTests(unittest.TestCase):
         self.assertEqual(percona_utils.determine_packages(),
                          ['percona-xtradb-cluster-server-5.5',
                           'percona-xtradb-cluster-client-5.5'])
+
+    @mock.patch.object(percona_utils, 'get_wsrep_value')
+    def test_cluster_in_sync_not_ready(self, _wsrep_value):
+        _wsrep_value.side_effect = [None, None]
+        self.assertFalse(percona_utils.cluster_in_sync())
+
+    @mock.patch.object(percona_utils, 'get_wsrep_value')
+    def test_cluster_in_sync_ready_syncing(self, _wsrep_value):
+        _wsrep_value.side_effect = [True, None]
+        self.assertFalse(percona_utils.cluster_in_sync())
+
+    @mock.patch.object(percona_utils, 'get_wsrep_value')
+    def test_cluster_in_sync_ready_sync(self, _wsrep_value):
+        _wsrep_value.side_effect = [True, 4]
+        self.assertTrue(percona_utils.cluster_in_sync())
+
+    @mock.patch.object(percona_utils, 'get_wsrep_value')
+    def test_cluster_in_sync_ready_sync_donor(self, _wsrep_value):
+        _wsrep_value.side_effect = [True, 2]
+        self.assertTrue(percona_utils.cluster_in_sync())
