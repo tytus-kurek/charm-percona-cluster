@@ -11,7 +11,10 @@ TO_PATCH = ['log', 'config',
             'relation_set',
             'update_nrpe_config',
             'get_iface_for_address',
-            'get_netmask_for_address']
+            'get_netmask_for_address',
+            'cluster_in_sync',
+            'is_bootstrapped',
+            'status_set']
 
 
 class TestHaRelation(CharmTestCase):
@@ -127,3 +130,25 @@ class TestHaRelation(CharmTestCase):
 
         call_args, call_kwargs = self.relation_set.call_args
         self.assertEqual(resource_params, call_kwargs['resource_params'])
+
+
+class TestAssessStatus(CharmTestCase):
+    def setUp(self):
+        CharmTestCase.setUp(self, hooks, TO_PATCH)
+
+    def test_not_bootstrapped(self):
+        self.is_bootstrapped.return_value = False
+        hooks.assess_status()
+        self.status_set.assert_called_with('blocked', mock.ANY)
+
+    def test_bootstrapped_in_sync(self):
+        self.is_bootstrapped.return_value = True
+        self.cluster_in_sync.return_value = True
+        hooks.assess_status()
+        self.status_set.assert_called_with('active', mock.ANY)
+
+    def test_bootstrapped_not_in_sync(self):
+        self.is_bootstrapped.return_value = True
+        self.cluster_in_sync.return_value = False
+        hooks.assess_status()
+        self.status_set.assert_called_with('blocked', mock.ANY)
