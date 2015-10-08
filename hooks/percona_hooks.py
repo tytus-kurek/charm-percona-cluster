@@ -629,8 +629,6 @@ def assess_status():
         status_set('blocked', 'Insufficient peers to bootstrap cluster')
         return
     # Once running, ensure that cluster is in sync and has the required peers
-    # will need to access mysql to determine status.
-    # Also check to see if hacluster has presented 'clustered' back yet
     if is_bootstrapped() and cluster_in_sync():
         status_set('active', 'Unit is ready and in sync')
     else:
