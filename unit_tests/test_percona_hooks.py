@@ -11,7 +11,9 @@ TO_PATCH = ['log', 'config',
             'relation_set',
             'update_nrpe_config',
             'get_iface_for_address',
-            'get_netmask_for_address']
+            'get_netmask_for_address',
+            'is_bootstrapped',
+            'is_sufficient_peers']
 
 
 class TestHaRelation(CharmTestCase):

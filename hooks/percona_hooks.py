@@ -61,6 +61,7 @@ from percona_utils import (
     notify_bootstrapped,
     is_bootstrapped,
     get_wsrep_value,
+    assess_status,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -625,6 +626,7 @@ def main():
         hooks.execute(sys.argv)
     except UnregisteredHookError as e:
         log('Unknown hook {} - skipping.'.format(e))
+    assess_status()
 
 
 if __name__ == '__main__':
