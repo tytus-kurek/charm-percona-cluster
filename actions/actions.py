@@ -5,6 +5,7 @@ import sys
 
 from charmhelpers.core.host import service_pause, service_resume
 from charmhelpers.core.hookenv import action_fail, status_set
+from percona_utils import assess_status
 
 
 MYSQL_SERVICE = "mysql"
@@ -18,7 +19,8 @@ def pause(args):
     if not service_pause(MYSQL_SERVICE):
         raise Exception("Failed to pause MySQL service.")
     status_set(
-        "maintenance", "Paused. Use 'resume' action to resume normal service.")
+        "maintenance",
+        "Unit paused - use 'resume' action to resume normal service")
 
 
 def resume(args):
@@ -27,7 +29,7 @@ def resume(args):
     @raises Exception should the service fail to start."""
     if not service_resume(MYSQL_SERVICE):
         raise Exception("Failed to resume MySQL service.")
-    status_set("active", "")
+    assess_status()
 
 
 # A dictionary of all the defined actions to callables (which take

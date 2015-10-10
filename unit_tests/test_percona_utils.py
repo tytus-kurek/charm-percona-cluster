@@ -7,6 +7,8 @@ import sys
 sys.modules['MySQLdb'] = mock.Mock()
 import percona_utils
 
+from test_utils import CharmTestCase
+
 
 class UtilsTests(unittest.TestCase):
     def setUp(self):
@@ -160,3 +162,72 @@ class UtilsTests(unittest.TestCase):
         self.assertEqual(percona_utils.determine_packages(),
                          ['percona-xtradb-cluster-server-5.5',
                           'percona-xtradb-cluster-client-5.5'])
+
+    @mock.patch.object(percona_utils, 'get_wsrep_value')
+    def test_cluster_in_sync_not_ready(self, _wsrep_value):
+        _wsrep_value.side_effect = [None, None]
+        self.assertFalse(percona_utils.cluster_in_sync())
+
+    @mock.patch.object(percona_utils, 'get_wsrep_value')
+    def test_cluster_in_sync_ready_syncing(self, _wsrep_value):
+        _wsrep_value.side_effect = [True, None]
+        self.assertFalse(percona_utils.cluster_in_sync())
+
+    @mock.patch.object(percona_utils, 'get_wsrep_value')
+    def test_cluster_in_sync_ready_sync(self, _wsrep_value):
+        _wsrep_value.side_effect = [True, 4]
+        self.assertTrue(percona_utils.cluster_in_sync())
+
+    @mock.patch.object(percona_utils, 'get_wsrep_value')
+    def test_cluster_in_sync_ready_sync_donor(self, _wsrep_value):
+        _wsrep_value.side_effect = [True, 2]
+        self.assertTrue(percona_utils.cluster_in_sync())
+
+
+TO_PATCH = [
+    'status_set',
+    'is_sufficient_peers',
+    'is_bootstrapped',
+    'config',
+    'cluster_in_sync',
+]
+
+
+class TestAssessStatus(CharmTestCase):
+    def setUp(self):
+        CharmTestCase.setUp(self, percona_utils, TO_PATCH)
+
+    def test_single_unit(self):
+        self.config.return_value = None
+        self.is_sufficient_peers.return_value = True
+        percona_utils.assess_status()
+        self.status_set.assert_called_with('active', mock.ANY)
+
+    def test_insufficient_peers(self):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = False
+        percona_utils.assess_status()
+        self.status_set.assert_called_with('blocked', mock.ANY)
+
+    def test_not_bootstrapped(self):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = True
+        self.is_bootstrapped.return_value = False
+        percona_utils.assess_status()
+        self.status_set.assert_called_with('waiting', mock.ANY)
+
+    def test_bootstrapped_in_sync(self):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = True
+        self.is_bootstrapped.return_value = True
+        self.cluster_in_sync.return_value = True
+        percona_utils.assess_status()
+        self.status_set.assert_called_with('active', mock.ANY)
+
+    def test_bootstrapped_not_in_sync(self):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = True
+        self.is_bootstrapped.return_value = True
+        self.cluster_in_sync.return_value = False
+        percona_utils.assess_status()
+        self.status_set.assert_called_with('blocked', mock.ANY)
