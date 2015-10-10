@@ -25,6 +25,7 @@ from charmhelpers.core.hookenv import (
     INFO,
     WARNING,
     ERROR,
+    status_set,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -372,3 +373,24 @@ def cluster_in_sync():
     if ready and int(sync_status) in [2, 4]:
         return True
     return False
+
+
+def assess_status():
+    '''Assess the status of the current unit'''
+    min_size = config('min-cluster-size')
+    # Ensure that number of peers > cluster size configuration
+    if not is_sufficient_peers():
+        status_set('blocked', 'Insufficient peers to bootstrap cluster')
+        return
+
+    if min_size and int(min_size) > 1:
+        # Once running, ensure that cluster is in sync
+        # and has the required peers
+        if not is_bootstrapped():
+            status_set('waiting', 'Unit waiting for cluster bootstrap')
+        elif is_bootstrapped() and cluster_in_sync():
+            status_set('active', 'Unit is ready and clustered')
+        else:
+            status_set('blocked', 'Unit is not in sync')
+    else:
+        status_set('active', 'Unit is ready')
