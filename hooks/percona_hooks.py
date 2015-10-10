@@ -24,7 +24,6 @@ from charmhelpers.core.hookenv import (
     INFO,
     WARNING,
     is_leader,
-    status_set,
 )
 from charmhelpers.core.host import (
     service,
@@ -62,7 +61,7 @@ from percona_utils import (
     notify_bootstrapped,
     is_bootstrapped,
     get_wsrep_value,
-    cluster_in_sync,
+    assess_status,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -620,27 +619,6 @@ def update_nrpe_config():
         check_cmd='check_procs -c 1:1 -C mysqld'
     )
     nrpe_setup.write()
-
-
-def assess_status():
-    '''Assess the status of the current unit'''
-    min_size = config('min-cluster-size')
-    # Ensure that number of peers > cluster size configuration
-    if not is_sufficient_peers():
-        status_set('blocked', 'Insufficient peers to bootstrap cluster')
-        return
-
-    if min_size and int(min_size) > 1:
-        # Once running, ensure that cluster is in sync
-        # and has the required peers
-        if not is_bootstrapped():
-            status_set('waiting', 'Unit waiting for cluster bootstrap')
-        elif is_bootstrapped() and cluster_in_sync():
-            status_set('active', 'Unit is ready and clustered')
-        else:
-            status_set('blocked', 'Unit is not in sync')
-    else:
-        status_set('active', 'Unit is ready')
 
 
 def main():
