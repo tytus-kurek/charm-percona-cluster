@@ -20,7 +20,7 @@ def pause(args):
         raise Exception("Failed to pause MySQL service.")
     status_set(
         "maintenance",
-        "Unit paused. Use 'resume' action to resume normal service.")
+        "Unit paused - use 'resume' action to resume normal service")
 
 
 def resume(args):
