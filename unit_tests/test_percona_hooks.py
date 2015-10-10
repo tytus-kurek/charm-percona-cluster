@@ -14,7 +14,8 @@ TO_PATCH = ['log', 'config',
             'get_netmask_for_address',
             'cluster_in_sync',
             'is_bootstrapped',
-            'status_set']
+            'status_set',
+            'is_sufficient_peers']
 
 
 class TestHaRelation(CharmTestCase):
@@ -136,18 +137,36 @@ class TestAssessStatus(CharmTestCase):
     def setUp(self):
         CharmTestCase.setUp(self, hooks, TO_PATCH)
 
-    def test_not_bootstrapped(self):
-        self.is_bootstrapped.return_value = False
+    def test_single_unit(self):
+        self.config.return_value = None
+        self.is_sufficient_peers.return_value = True
+        hooks.assess_status()
+        self.status_set.assert_called_with('active', mock.ANY)
+
+    def test_insufficient_peers(self):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = False
         hooks.assess_status()
         self.status_set.assert_called_with('blocked', mock.ANY)
 
+    def test_not_bootstrapped(self):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = True
+        self.is_bootstrapped.return_value = False
+        hooks.assess_status()
+        self.status_set.assert_called_with('waiting', mock.ANY)
+
     def test_bootstrapped_in_sync(self):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = True
         self.is_bootstrapped.return_value = True
         self.cluster_in_sync.return_value = True
         hooks.assess_status()
         self.status_set.assert_called_with('active', mock.ANY)
 
     def test_bootstrapped_not_in_sync(self):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = True
         self.is_bootstrapped.return_value = True
         self.cluster_in_sync.return_value = False
         hooks.assess_status()

@@ -624,15 +624,23 @@ def update_nrpe_config():
 
 def assess_status():
     '''Assess the status of the current unit'''
+    min_size = config('min-cluster-size')
     # Ensure that number of peers > cluster size configuration
-    if not is_bootstrapped():
+    if not is_sufficient_peers():
         status_set('blocked', 'Insufficient peers to bootstrap cluster')
         return
-    # Once running, ensure that cluster is in sync and has the required peers
-    if is_bootstrapped() and cluster_in_sync():
-        status_set('active', 'Unit is ready and in sync')
+
+    if min_size and int(min_size) > 1:
+        # Once running, ensure that cluster is in sync
+        # and has the required peers
+        if not is_bootstrapped():
+            status_set('waiting', 'Unit waiting for cluster bootstrap')
+        elif is_bootstrapped() and cluster_in_sync():
+            status_set('active', 'Unit is ready and clustered')
+        else:
+            status_set('blocked', 'Unit is not in sync')
     else:
-        status_set('blocked', 'Unit is not in sync')
+        status_set('active', 'Unit is ready')
 
 
 def main():
