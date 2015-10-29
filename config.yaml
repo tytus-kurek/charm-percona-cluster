@@ -65,6 +65,13 @@ options:
     description: |
       Re-sync account password for new cluster nodes; must be configured
       pre-deployment for Active-Active clusters.
+  sst-method:
+    type: string
+    default: xtrabackup-v2
+    description: |
+      Percona method for taking the State Snapshot Transfer (SST), can be:
+      'rsync', 'xtrabackup', 'xtrabackup-v2', 'mysqldump', 'skip' - see
+      https://www.percona.com/doc/percona-xtradb-cluster/5.5/wsrep-system-index.html#wsrep_sst_method
   min-cluster-size:
     type: int
     default:
