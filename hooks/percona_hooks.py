@@ -121,7 +121,7 @@ def render_config(clustered=False, hosts=[]):
         'private_address': get_host_ip(),
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
-        'sst_method': 'xtrabackup',
+        'sst_method': config('sst-method'),
         'sst_password': config('sst-password'),
         'innodb_file_per_table': config('innodb-file-per-table'),
         'table_open_cache': config('table-open-cache'),
