@@ -359,8 +359,12 @@ def get_db_host(client_hostname):
     vips = config('vip').split() if config('vip') else []
     client_ip = get_host_ip(client_hostname)
     access_network = config('access-network')
-    if (access_network is not None and
-            is_address_in_network(access_network, client_ip)):
+    if access_network is not None:
+        if not is_address_in_network(access_network, client_ip):
+            log("Host '%s' not in access-network '%s' - ignoring" %
+                (client_ip, access_network), level=INFO)
+            return
+
         if is_clustered():
             for vip in vips:
                 if is_address_in_network(access_network, vip):
@@ -448,6 +452,8 @@ def shared_db_changed(relation_id=None, unit=None):
             #       database access if remote unit has presented a
             #       hostname or ip address thats within the configured
             #       network cidr
+            log("Host '%s' not in access-network '%s' - ignoring" %
+                (normalized_address, access_network), level=INFO)
             return
 
         # NOTE: do this before querying access grants
