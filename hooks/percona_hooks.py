@@ -356,28 +356,38 @@ def db_changed(relation_id=None, unit=None, admin=None):
 
 
 def get_db_host(client_hostname):
-    vips = config('vip').split() if config('vip') else []
-    client_ip = get_host_ip(client_hostname)
-    access_network = config('access-network')
-    if access_network is not None:
-        if not is_address_in_network(access_network, client_ip):
-            log("Host '%s' not in access-network '%s' - ignoring" %
-                (client_ip, access_network), level=INFO)
-            return
+    """Get address of local database host.
 
-        if is_clustered():
-            for vip in vips:
-                if is_address_in_network(access_network, vip):
-                    return vip
+    If an access-network has been configured, expect selected address to be
+    on that network. If none can be found, revert to primary address.
+
+    If vip(s) are configured, chooses first available.
+    """
+    vips = config('vip').split() if config('vip') else []
+    access_network = config('access-network')
+    if access_network:
+        client_ip = get_host_ip(client_hostname)
+        if is_address_in_network(access_network, client_ip):
+            if is_clustered():
+                for vip in vips:
+                    if is_address_in_network(access_network, vip):
+                        return vip
+
+                log("Unable to identify a VIP in the access-network '%s'" %
+                    (access_network), level=WARNING)
+            else:
+                return get_address_in_network(access_network)
         else:
-            return get_address_in_network(access_network)
-    elif is_clustered():
-        return config('vip')  # NOTE on private network
-    else:
-        if config('prefer-ipv6'):
-            return get_ipv6_addr(exc_list=vips)[0]
-        else:
-            return unit_get('private-address')
+            log("Client address '%s' not in access-network '%s'" %
+                (client_ip, access_network), level=WARNING)
+
+    if is_clustered() and vips:
+        return vips[0]  # NOTE on private network
+
+    if config('prefer-ipv6'):
+        return get_ipv6_addr(exc_list=vips)[0]
+
+    return unit_get('private-address')
 
 
 def configure_db_for_hosts(hosts, database, username, db_helper):
@@ -424,14 +434,6 @@ def shared_db_changed(relation_id=None, unit=None):
         return
 
     settings = relation_get(unit=unit, rid=relation_id)
-    if is_clustered():
-        db_host = config('vip')
-    else:
-        if config('prefer-ipv6'):
-            db_host = get_ipv6_addr(exc_list=[config('vip')])[0]
-        else:
-            db_host = unit_get('private-address')
-
     access_network = config('access-network')
     db_helper = get_db_helper()
 
