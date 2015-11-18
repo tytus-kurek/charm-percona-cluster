@@ -1,6 +1,6 @@
 name: percona-cluster
 summary: Percona XtraDB Cluster - Active/Active MySQL
-maintainer: James Page <james.page@ubuntu.com>
+maintainer: OpenStack Charmers <openstack-charmers@lists.ubuntu.com>
 description: |
   Percona XtraDB Cluster provides an active/active MySQL
   compatible alternative implemented using the Galera
