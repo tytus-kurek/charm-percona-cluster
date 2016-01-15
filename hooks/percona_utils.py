@@ -26,6 +26,7 @@ from charmhelpers.core.hookenv import (
     WARNING,
     ERROR,
     status_set,
+    cached,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -47,8 +48,7 @@ from MySQLdb import (
 KEY = "keys/repo.percona.com"
 REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
-MY_CNF = "/etc/mysql/my.cnf"
-SEEDED_MARKER = "/var/lib/mysql/seeded"
+SEEDED_MARKER = "{data_dir}/seeded"
 HOSTS_FILE = '/etc/hosts'
 
 
@@ -70,12 +70,13 @@ def determine_packages():
 
 def seeded():
     ''' Check whether service unit is already seeded '''
-    return os.path.exists(SEEDED_MARKER)
+    return os.path.exists(SEEDED_MARKER.format(data_dir=resolve_data_dir()))
 
 
 def mark_seeded():
     ''' Mark service unit as seeded '''
-    with open(SEEDED_MARKER, 'w') as seeded:
+    with open(SEEDED_MARKER.format(data_dir=resolve_data_dir()),
+              'w') as seeded:
         seeded.write('done')
 
 
@@ -394,3 +395,19 @@ def assess_status():
             status_set('blocked', 'Unit is not in sync')
     else:
         status_set('active', 'Unit is ready')
+
+
+@cached
+def resolve_data_dir():
+    if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
+        return '/var/lib/mysql'
+    else:
+        return '/var/lib/percona-xtradb-cluster'
+
+
+@cached
+def resolve_cnf_file():
+    if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
+        return '/etc/mysql/my.cnf'
+    else:
+        return '/etc/mysql/percona-xtradb-cluster.conf.d/mysqld.cnf'

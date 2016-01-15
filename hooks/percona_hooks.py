@@ -45,7 +45,6 @@ from charmhelpers.contrib.peerstorage import (
 )
 from percona_utils import (
     determine_packages,
-    MY_CNF,
     setup_percona_repo,
     get_host_ip,
     get_cluster_hosts,
@@ -62,6 +61,7 @@ from percona_utils import (
     is_bootstrapped,
     get_wsrep_value,
     assess_status,
+    resolve_cnf_file,
 )
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
@@ -113,8 +113,8 @@ def install():
 
 
 def render_config(clustered=False, hosts=[]):
-    if not os.path.exists(os.path.dirname(MY_CNF)):
-        os.makedirs(os.path.dirname(MY_CNF))
+    if not os.path.exists(os.path.dirname(resolve_cnf_file())):
+        os.makedirs(os.path.dirname(resolve_cnf_file()))
 
     context = {
         'cluster_name': 'juju_cluster',
@@ -125,7 +125,7 @@ def render_config(clustered=False, hosts=[]):
         'sst_password': config('sst-password'),
         'innodb_file_per_table': config('innodb-file-per-table'),
         'table_open_cache': config('table-open-cache'),
-        'lp1366997_workaround': config('lp1366997-workaround')
+        'lp1366997_workaround': config('lp1366997-workaround'),
     }
 
     if config('prefer-ipv6'):
@@ -139,7 +139,8 @@ def render_config(clustered=False, hosts=[]):
         context['ipv6'] = False
 
     context.update(PerconaClusterHelper().parse_config())
-    render(os.path.basename(MY_CNF), MY_CNF, context, perms=0o444)
+    render(os.path.basename(resolve_cnf_file()),
+           resolve_cnf_file(), context, perms=0o444)
 
 
 def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
@@ -154,10 +155,10 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     it is started so long as the new node to be added is guaranteed to have
     been restarted so as to apply the new config.
     """
-    pre_hash = file_hash(MY_CNF)
+    pre_hash = file_hash(resolve_cnf_file())
     render_config(clustered, hosts)
     update_db_rels = False
-    if file_hash(MY_CNF) != pre_hash or bootstrap:
+    if file_hash(resolve_cnf_file()) != pre_hash or bootstrap:
         if bootstrap:
             service('bootstrap-pxc', 'mysql')
             # NOTE(dosaboy): this will not actually do anything if no cluster
