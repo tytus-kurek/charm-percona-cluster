@@ -139,7 +139,7 @@ def service_running(service_name):
             return False
         else:
             if ("start/running" in output or "is running" in output or
-                "up and running" in output):
+                    "up and running" in output):
                 return True
             else:
                 return False
