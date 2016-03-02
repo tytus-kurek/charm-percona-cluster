@@ -6,3 +6,5 @@ bin
 *.pyo
 __pycache__
 *.sw[nop]
+.testrepository
+.tox
