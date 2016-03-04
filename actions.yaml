@@ -2,3 +2,19 @@ pause:
   description: Pause the MySQL service.
 resume:
   description: Resume the MySQL service.
+backup:
+  description: Full database backup
+  params:
+    basedir:
+      type: string
+      default: "/opt/backups/mysql"
+      description: The base directory for backups
+    compress:
+      type: boolean
+      default: false
+      description: Whether or not to compress the backup
+    incremental:
+      type: boolean
+      default: false
+      description: Make an incremental database backup
+
