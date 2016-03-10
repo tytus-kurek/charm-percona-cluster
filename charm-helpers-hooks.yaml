@@ -10,3 +10,4 @@ include:
     - contrib.network.ip
     - contrib.database
     - contrib.charmsupport
+    - contrib.hardening|inc=*

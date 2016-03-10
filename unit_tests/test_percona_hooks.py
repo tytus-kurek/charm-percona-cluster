@@ -1,9 +1,18 @@
-import mock
 import sys
+
+import mock
+
 from test_utils import CharmTestCase
 
 sys.modules['MySQLdb'] = mock.Mock()
-import percona_hooks as hooks
+# python-apt is not installed as part of test-requirements but is imported by
+# some charmhelpers modules so create a fake import.
+sys.modules['apt'] = mock.MagicMock()
+
+with mock.patch('charmhelpers.contrib.hardening.harden.harden') as mock_dec:
+    mock_dec.side_effect = (lambda *dargs, **dkwargs: lambda f:
+                            lambda *args, **kwargs: f(*args, **kwargs))
+    import percona_hooks as hooks
 
 TO_PATCH = ['log', 'config',
             'get_db_helper',

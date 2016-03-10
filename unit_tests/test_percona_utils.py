@@ -1,8 +1,9 @@
-import mock
 import os
 import unittest
-import tempfile
 import sys
+import tempfile
+
+import mock
 
 sys.modules['MySQLdb'] = mock.Mock()
 import percona_utils

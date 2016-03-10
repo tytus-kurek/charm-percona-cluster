@@ -84,6 +84,10 @@ from charmhelpers.contrib.network.ip import (
 
 from charmhelpers.contrib.charmsupport import nrpe
 
+from charmhelpers.contrib.hardening.harden import harden
+from charmhelpers.contrib.hardening.mysql.checks import run_mysql_checks
+
+
 hooks = Hooks()
 
 RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
@@ -96,6 +100,7 @@ RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
 
 
 @hooks.hook('install.real')
+@harden()
 def install():
     execd_preinstall()
     if config('source') is None and \
@@ -110,6 +115,8 @@ def install():
     apt_update(fatal=True)
     apt_install(determine_packages(), fatal=True)
     configure_sstuser(config('sst-password'))
+    if config('harden') and 'mysql' in config('harden'):
+        run_mysql_checks()
 
 
 def render_config(clustered=False, hosts=[]):
@@ -206,6 +213,7 @@ def update_shared_db_rels():
 
 
 @hooks.hook('upgrade-charm')
+@harden()
 def upgrade():
     check_bootstrap = False
     try:
@@ -229,6 +237,7 @@ def upgrade():
 
 
 @hooks.hook('config-changed')
+@harden()
 def config_changed():
     if config('prefer-ipv6'):
         assert_charm_supports_ipv6()
@@ -628,6 +637,12 @@ def update_nrpe_config():
         check_cmd='check_procs -c 1:1 -C mysqld'
     )
     nrpe_setup.write()
+
+
+@hooks.hook('update-status')
+@harden()
+def update_status():
+    log('Updating status.')
 
 
 def main():

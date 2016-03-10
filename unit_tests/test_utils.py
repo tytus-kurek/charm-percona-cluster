@@ -1,6 +1,7 @@
+import os
 import logging
 import unittest
-import os
+
 import yaml
 
 from contextlib import contextmanager
