@@ -24,6 +24,7 @@ from charmhelpers.core.hookenv import (
     INFO,
     WARNING,
     is_leader,
+    network_get_primary_address,
 )
 from charmhelpers.core.host import (
     service,
@@ -80,6 +81,7 @@ from charmhelpers.contrib.network.ip import (
     get_netmask_for_address,
     get_ipv6_addr,
     is_address_in_network,
+    resolve_network_cidr,
 )
 
 from charmhelpers.contrib.charmsupport import nrpe
@@ -365,18 +367,21 @@ def db_changed(relation_id=None, unit=None, admin=None):
                  })
 
 
-def get_db_host(client_hostname):
+def get_db_host(client_hostname, interface='shared-db'):
     """Get address of local database host.
 
     If an access-network has been configured, expect selected address to be
     on that network. If none can be found, revert to primary address.
 
+    If network spaces are supported (Juju >= 2.0), use network-get to
+    retrieve the network binding for the interface.
+
     If vip(s) are configured, chooses first available.
     """
     vips = config('vip').split() if config('vip') else []
     access_network = config('access-network')
+    client_ip = get_host_ip(client_hostname)
     if access_network:
-        client_ip = get_host_ip(client_hostname)
         if is_address_in_network(access_network, client_ip):
             if is_clustered():
                 for vip in vips:
@@ -390,6 +395,22 @@ def get_db_host(client_hostname):
         else:
             log("Client address '%s' not in access-network '%s'" %
                 (client_ip, access_network), level=WARNING)
+    else:
+        try:
+            # NOTE(jamespage)
+            # Try to use network spaces to resolve binding for
+            # interface, and to resolve the VIP associated with
+            # the binding if provided.
+            interface_binding = network_get_primary_address(interface)
+            if is_clustered() and vips:
+                interface_cidr = resolve_network_cidr(interface_binding)
+                for vip in vips:
+                    if is_address_in_network(interface_cidr, vip):
+                        return vip
+            return interface_binding
+        except NotImplementedError:
+            # NOTE(jamespage): skip - fallback to previous behaviour
+            pass
 
     if is_clustered() and vips:
         return vips[0]  # NOTE on private network

@@ -22,12 +22,19 @@ TO_PATCH = ['log', 'config',
             'get_iface_for_address',
             'get_netmask_for_address',
             'is_bootstrapped',
-            'is_sufficient_peers']
+            'is_sufficient_peers',
+            'network_get_primary_address',
+            'resolve_network_cidr',
+            'unit_get',
+            'get_host_ip',
+            'is_clustered',
+            'get_ipv6_addr']
 
 
-class TestHaRelation(CharmTestCase):
+class TestHARelation(CharmTestCase):
     def setUp(self):
         CharmTestCase.setUp(self, hooks, TO_PATCH)
+        self.network_get_primary_address.side_effect = NotImplementedError
 
     @mock.patch('sys.exit')
     def test_relation_not_configured(self, exit_):
@@ -138,3 +145,45 @@ class TestHaRelation(CharmTestCase):
 
         call_args, call_kwargs = self.relation_set.call_args
         self.assertEqual(resource_params, call_kwargs['resource_params'])
+
+
+class TestHostResolution(CharmTestCase):
+    def setUp(self):
+        CharmTestCase.setUp(self, hooks, TO_PATCH)
+        self.network_get_primary_address.side_effect = NotImplementedError
+        self.is_clustered.return_value = False
+        self.config.side_effect = self.test_config.get
+        self.test_config.set('prefer-ipv6', False)
+
+    def test_get_db_host_defaults(self):
+        '''
+        Ensure that with nothing other than defaults private-address is used
+        '''
+        self.unit_get.return_value = 'mydbhost'
+        self.get_host_ip.return_value = '10.0.0.2'
+        self.assertEqual(hooks.get_db_host('myclient'), 'mydbhost')
+
+    def test_get_db_host_network_spaces(self):
+        '''
+        Ensure that if the shared-db relation is bound, its bound address
+        is used
+        '''
+        self.get_host_ip.return_value = '10.0.0.2'
+        self.network_get_primary_address.side_effect = None
+        self.network_get_primary_address.return_value = '192.168.20.2'
+        self.assertEqual(hooks.get_db_host('myclient'), '192.168.20.2')
+        self.network_get_primary_address.assert_called_with('shared-db')
+
+    def test_get_db_host_network_spaces_clustered(self):
+        '''
+        Ensure that if the shared-db relation is bound and the unit is
+        clustered, that the correct VIP is chosen
+        '''
+        self.get_host_ip.return_value = '10.0.0.2'
+        self.is_clustered.return_value = True
+        self.test_config.set('vip', '10.0.0.100 192.168.20.200')
+        self.network_get_primary_address.side_effect = None
+        self.network_get_primary_address.return_value = '192.168.20.2'
+        self.resolve_network_cidr.return_value = '192.168.20.2/24'
+        self.assertEqual(hooks.get_db_host('myclient'), '192.168.20.200')
+        self.network_get_primary_address.assert_called_with('shared-db')
