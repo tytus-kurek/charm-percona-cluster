@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# test percona-cluster pause and resum
+# test percona-cluster pause and resume
 
 import basic_deployment
 from charmhelpers.contrib.amulet.utils import AmuletUtils

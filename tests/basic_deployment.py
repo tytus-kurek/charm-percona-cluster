@@ -151,7 +151,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
             print("ERROR: command returned non-zero '%s'" % (code))
             return False
 
-        return self.is_port_open(u, '3306')
+        return True
 
     def get_wsrep_value(self, attr, unit=None):
         if unit:
@@ -190,4 +190,8 @@ class BasicDeployment(OpenStackAmuletDeployment):
             return True
         except TimeoutError:  # noqa this exception only available in py3
             print("ERROR: could not connect to %s:%s" % (addr, port))
+            return False
+        except ConnectionRefusedError:  # noqa - also only in py3
+            print("ERROR: connection refused connecting to %s:%s" % (addr,
+                                                                     port))
             return False
