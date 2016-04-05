@@ -25,7 +25,6 @@ from charmhelpers.core.hookenv import (
     INFO,
     WARNING,
     ERROR,
-    status_set,
     cached,
 )
 from charmhelpers.fetch import (
@@ -37,6 +36,11 @@ from charmhelpers.contrib.network.ip import (
 )
 from charmhelpers.contrib.database.mysql import (
     MySQLHelper,
+)
+from charmhelpers.contrib.openstack.utils import (
+    make_assess_status_func,
+    pause_unit,
+    resume_unit,
 )
 
 # NOTE: python-mysqldb is installed by charmhelpers.contrib.database.mysql so
@@ -50,6 +54,10 @@ REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
 SEEDED_MARKER = "{data_dir}/seeded"
 HOSTS_FILE = '/etc/hosts'
+# NOTE(ajkavanagh) - this is 'required' for the pause/resume code for
+# maintenance mode, but is currently not populated as the
+# charm_check_function() checks whether the unit is working properly.
+REQUIRED_INTERFACES = {}
 
 
 def determine_packages():
@@ -376,25 +384,27 @@ def cluster_in_sync():
     return False
 
 
-def assess_status():
-    '''Assess the status of the current unit'''
+def charm_check_func():
+    """Custom function to assess the status of the current unit
+
+    @returns (status, message) - tuple of strings if an issue
+    """
     min_size = config('min-cluster-size')
     # Ensure that number of peers > cluster size configuration
     if not is_sufficient_peers():
-        status_set('blocked', 'Insufficient peers to bootstrap cluster')
-        return
+        return ('blocked', 'Insufficient peers to bootstrap cluster')
 
     if min_size and int(min_size) > 1:
         # Once running, ensure that cluster is in sync
         # and has the required peers
         if not is_bootstrapped():
-            status_set('waiting', 'Unit waiting for cluster bootstrap')
+            return ('waiting', 'Unit waiting for cluster bootstrap')
         elif is_bootstrapped() and cluster_in_sync():
-            status_set('active', 'Unit is ready and clustered')
+            return ('active', 'Unit is ready and clustered')
         else:
-            status_set('blocked', 'Unit is not in sync')
+            return ('blocked', 'Unit is not in sync')
     else:
-        status_set('active', 'Unit is ready')
+        return ('active', 'Unit is ready')
 
 
 @cached
@@ -411,3 +421,100 @@ def resolve_cnf_file():
         return '/etc/mysql/my.cnf'
     else:
         return '/etc/mysql/percona-xtradb-cluster.conf.d/mysqld.cnf'
+
+
+class FakeOSConfigRenderer(object):
+    """This class is to provide to register_configs() as a 'fake'
+    OSConfigRenderer object that has a complete_contexts method that returns
+    an empty list.  This is so that the pause/resume framework can be used
+    from charmhelpers that requires configs to be able to run.
+    This is a bit of a hack, but via Python's duck-typing enables the function
+    to work.
+    """
+    def complete_contexts(self):
+        return []
+
+
+def register_configs():
+    """Return a OSConfigRenderer object.
+    However, ceph-mon wasn't written using OSConfigRenderer objects to do the
+    config files, so this just returns an empty OSConfigRenderer object.
+
+    @returns empty FakeOSConfigRenderer object.
+    """
+    return FakeOSConfigRenderer()
+
+
+def services():
+    """Return a list of services that are managed by this charm.
+
+    @returns [services] - list of strings that are service names.
+    """
+    return ['mysql']
+
+
+def assess_status(configs):
+    """Assess status of current unit
+    Decides what the state of the unit should be based on the current
+    configuration.
+    SIDE EFFECT: calls set_os_workload_status(...) which sets the workload
+    status of the unit.
+    Also calls status_set(...) directly if paused state isn't complete.
+    @param configs: a templating.OSConfigRenderer() object
+    @returns None - this function is executed for its side-effect
+    """
+    assess_status_func(configs)()
+
+
+def assess_status_func(configs):
+    """Helper function to create the function that will assess_status() for
+    the unit.
+    Uses charmhelpers.contrib.openstack.utils.make_assess_status_func() to
+    create the appropriate status function and then returns it.
+    Used directly by assess_status() and also for pausing and resuming
+    the unit.
+
+    NOTE(ajkavanagh) ports are not checked due to race hazards with services
+    that don't behave sychronously w.r.t their service scripts.  e.g.
+    apache2.
+    @param configs: a templating.OSConfigRenderer() object
+    @return f() -> None : a function that assesses the unit's workload status
+    """
+    return make_assess_status_func(
+        configs, REQUIRED_INTERFACES,
+        charm_func=lambda _: charm_check_func(),
+        services=services(), ports=None)
+
+
+def pause_unit_helper(configs):
+    """Helper function to pause a unit, and then call assess_status(...) in
+    effect, so that the status is correctly updated.
+    Uses charmhelpers.contrib.openstack.utils.pause_unit() to do the work.
+    @param configs: a templating.OSConfigRenderer() object
+    @returns None - this function is executed for its side-effect
+    """
+    _pause_resume_helper(pause_unit, configs)
+
+
+def resume_unit_helper(configs):
+    """Helper function to resume a unit, and then call assess_status(...) in
+    effect, so that the status is correctly updated.
+    Uses charmhelpers.contrib.openstack.utils.resume_unit() to do the work.
+    @param configs: a templating.OSConfigRenderer() object
+    @returns None - this function is executed for its side-effect
+    """
+    _pause_resume_helper(resume_unit, configs)
+
+
+def _pause_resume_helper(f, configs):
+    """Helper function that uses the make_assess_status_func(...) from
+    charmhelpers.contrib.openstack.utils to create an assess_status(...)
+    function that can be used with the pause/resume of the unit
+    @param f: the function to be used with the assess_status(...) function
+    @returns None - this function is executed for its side-effect
+    """
+    # TODO(ajkavanagh) - ports= has been left off because of the race hazard
+    # that exists due to service_start()
+    f(assess_status_func(configs),
+      services=services(),
+      ports=None)

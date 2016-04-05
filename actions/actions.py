@@ -6,6 +6,8 @@ import subprocess
 import traceback
 from time import gmtime, strftime
 
+sys.path.append('hooks')
+
 from charmhelpers.core.host import service_pause, service_resume
 from charmhelpers.core.hookenv import (
     action_get,
@@ -15,9 +17,12 @@ from charmhelpers.core.hookenv import (
     config,
 )
 
-from percona_utils import assess_status
-
-MYSQL_SERVICE = "mysql"
+from percona_utils import (
+    pause_unit_helper,
+    resume_unit_helper,
+    register_configs,
+)
+from percona_hooks import config_changed
 
 
 def pause(args):
@@ -25,20 +30,18 @@ def pause(args):
 
     @raises Exception should the service fail to stop.
     """
-    if not service_pause(MYSQL_SERVICE):
-        raise Exception("Failed to pause MySQL service.")
-    status_set(
-        "maintenance",
-        "Unit paused - use 'resume' action to resume normal service")
+    pause_unit_helper(register_configs())
 
 
 def resume(args):
     """Resume the MySQL service.
 
-    @raises Exception should the service fail to start."""
-    if not service_resume(MYSQL_SERVICE):
-        raise Exception("Failed to resume MySQL service.")
-    assess_status()
+    @raises Exception should the service fail to start.
+    """
+    resume_unit_helper(register_configs())
+    # NOTE(ajkavanagh) - we force a config_changed pseudo-hook to see if the
+    # unit needs to bootstrap or restart it's services here.
+    config_changed()
 
 
 def backup():
@@ -87,12 +90,14 @@ def main(args):
     try:
         action = ACTIONS[action_name]
     except KeyError:
-        return "Action %s undefined" % action_name
+        s = "Action {} undefined".format(action_name)
+        action_fail(s)
+        return s
     else:
         try:
             action(args)
         except Exception as e:
-            action_fail(str(e))
+            action_fail("Action {} failed: {}".format(action_name, str(e)))
 
 
 if __name__ == "__main__":

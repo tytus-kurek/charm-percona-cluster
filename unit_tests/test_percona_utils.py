@@ -186,7 +186,7 @@ class UtilsTests(unittest.TestCase):
 
 
 TO_PATCH = [
-    'status_set',
+    # 'status_set',
     'is_sufficient_peers',
     'is_bootstrapped',
     'config',
@@ -201,34 +201,77 @@ class TestAssessStatus(CharmTestCase):
     def test_single_unit(self):
         self.config.return_value = None
         self.is_sufficient_peers.return_value = True
-        percona_utils.assess_status()
-        self.status_set.assert_called_with('active', mock.ANY)
+        stat, _ = percona_utils.charm_check_func()
+        assert stat == 'active'
 
     def test_insufficient_peers(self):
         self.config.return_value = 3
         self.is_sufficient_peers.return_value = False
-        percona_utils.assess_status()
-        self.status_set.assert_called_with('blocked', mock.ANY)
+        stat, _ = percona_utils.charm_check_func()
+        assert stat == 'blocked'
 
     def test_not_bootstrapped(self):
         self.config.return_value = 3
         self.is_sufficient_peers.return_value = True
         self.is_bootstrapped.return_value = False
-        percona_utils.assess_status()
-        self.status_set.assert_called_with('waiting', mock.ANY)
+        stat, _ = percona_utils.charm_check_func()
+        assert stat == 'waiting'
 
     def test_bootstrapped_in_sync(self):
         self.config.return_value = 3
         self.is_sufficient_peers.return_value = True
         self.is_bootstrapped.return_value = True
         self.cluster_in_sync.return_value = True
-        percona_utils.assess_status()
-        self.status_set.assert_called_with('active', mock.ANY)
+        stat, _ = percona_utils.charm_check_func()
+        assert stat == 'active'
 
     def test_bootstrapped_not_in_sync(self):
         self.config.return_value = 3
         self.is_sufficient_peers.return_value = True
         self.is_bootstrapped.return_value = True
         self.cluster_in_sync.return_value = False
-        percona_utils.assess_status()
-        self.status_set.assert_called_with('blocked', mock.ANY)
+        stat, _ = percona_utils.charm_check_func()
+        assert stat == 'blocked'
+
+    def test_assess_status(self):
+        with mock.patch.object(percona_utils, 'assess_status_func') as asf:
+            callee = mock.MagicMock()
+            asf.return_value = callee
+            percona_utils.assess_status('test-config')
+            asf.assert_called_once_with('test-config')
+            callee.assert_called_once_with()
+
+    @mock.patch.object(percona_utils, 'REQUIRED_INTERFACES')
+    @mock.patch.object(percona_utils, 'services')
+    @mock.patch.object(percona_utils, 'make_assess_status_func')
+    def test_assess_status_func(self,
+                                make_assess_status_func,
+                                services,
+                                REQUIRED_INTERFACES):
+        services.return_value = 's1'
+        percona_utils.assess_status_func('test-config')
+        # ports=None whilst port checks are disabled.
+        make_assess_status_func.assert_called_once_with(
+            'test-config', REQUIRED_INTERFACES, charm_func=mock.ANY,
+            services='s1', ports=None)
+
+    def test_pause_unit_helper(self):
+        with mock.patch.object(percona_utils, '_pause_resume_helper') as prh:
+            percona_utils.pause_unit_helper('random-config')
+            prh.assert_called_once_with(percona_utils.pause_unit,
+                                        'random-config')
+        with mock.patch.object(percona_utils, '_pause_resume_helper') as prh:
+            percona_utils.resume_unit_helper('random-config')
+            prh.assert_called_once_with(percona_utils.resume_unit,
+                                        'random-config')
+
+    @mock.patch.object(percona_utils, 'services')
+    def test_pause_resume_helper(self, services):
+        f = mock.MagicMock()
+        services.return_value = 's1'
+        with mock.patch.object(percona_utils, 'assess_status_func') as asf:
+            asf.return_value = 'assessor'
+            percona_utils._pause_resume_helper(f, 'some-config')
+            asf.assert_called_once_with('some-config')
+            # ports=None whilst port checks are disabled.
+            f.assert_called_once_with('assessor', services='s1', ports=None)

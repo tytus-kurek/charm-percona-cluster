@@ -5,6 +5,9 @@ include:
     - cli
     - fetch
     - contrib.hahelpers.cluster
+    - contrib.openstack.utils
+    - contrib.storage.linux
+    - contrib.python.packages
     - contrib.peerstorage
     - payload.execd
     - contrib.network.ip

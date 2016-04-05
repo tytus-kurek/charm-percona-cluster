@@ -44,26 +44,6 @@ from charmhelpers.contrib.peerstorage import (
     peer_store_and_set,
     peer_retrieve_by_prefix,
 )
-from percona_utils import (
-    determine_packages,
-    setup_percona_repo,
-    get_host_ip,
-    get_cluster_hosts,
-    configure_sstuser,
-    configure_mysql_root_password,
-    relation_clear,
-    assert_charm_supports_ipv6,
-    unit_sorted,
-    get_db_helper,
-    mark_seeded, seeded,
-    install_mysql_ocf,
-    is_sufficient_peers,
-    notify_bootstrapped,
-    is_bootstrapped,
-    get_wsrep_value,
-    assess_status,
-    resolve_cnf_file,
-)
 from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
 )
@@ -83,11 +63,34 @@ from charmhelpers.contrib.network.ip import (
     is_address_in_network,
     resolve_network_cidr,
 )
-
 from charmhelpers.contrib.charmsupport import nrpe
-
 from charmhelpers.contrib.hardening.harden import harden
 from charmhelpers.contrib.hardening.mysql.checks import run_mysql_checks
+from charmhelpers.contrib.openstack.utils import (
+    is_unit_paused_set,
+)
+
+from percona_utils import (
+    determine_packages,
+    setup_percona_repo,
+    get_host_ip,
+    get_cluster_hosts,
+    configure_sstuser,
+    configure_mysql_root_password,
+    relation_clear,
+    assert_charm_supports_ipv6,
+    unit_sorted,
+    get_db_helper,
+    mark_seeded, seeded,
+    install_mysql_ocf,
+    is_sufficient_peers,
+    notify_bootstrapped,
+    is_bootstrapped,
+    get_wsrep_value,
+    assess_status,
+    register_configs,
+    resolve_cnf_file,
+)
 
 
 hooks = Hooks()
@@ -241,6 +244,11 @@ def upgrade():
 @hooks.hook('config-changed')
 @harden()
 def config_changed():
+    # if we are paused, delay doing any config changed hooks.  It is forced on
+    # the resume.
+    if is_unit_paused_set():
+        return
+
     if config('prefer-ipv6'):
         assert_charm_supports_ipv6()
 
@@ -671,7 +679,7 @@ def main():
         hooks.execute(sys.argv)
     except UnregisteredHookError as e:
         log('Unknown hook {} - skipping.'.format(e))
-    assess_status()
+    assess_status(register_configs())
 
 
 if __name__ == '__main__':
