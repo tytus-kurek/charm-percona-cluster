@@ -61,13 +61,12 @@ REQUIRED_INTERFACES = {}
 
 
 def determine_packages():
-    if lsb_release()['DISTRIB_CODENAME'] > 'utopic':
-        # NOTE(beisner): pxc 5.6 client package is not available
-        # in Vivid, install mysql 5.6 client instead per
-        # https://launchpad.net/bugs/1476845.
+    if lsb_release()['DISTRIB_CODENAME'] >= 'wily':
+        # NOTE(beisner): Use recommended mysql-client package
+        # https://launchpad.net/bugs/1476845
+        # https://launchpad.net/bugs/1571789
         return [
             'percona-xtradb-cluster-server-5.6',
-            'mysql-client-5.6'
         ]
     else:
         return [

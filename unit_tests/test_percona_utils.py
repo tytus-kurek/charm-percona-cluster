@@ -151,15 +151,20 @@ class UtilsTests(unittest.TestCase):
         self.assertTrue(percona_utils.is_sufficient_peers())
 
     @mock.patch.object(percona_utils, 'lsb_release')
-    def test_packages_gt_utopic(self, mock_lsb_release):
-        mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'vivid'}
+    def test_packages_eq_wily(self, mock_lsb_release):
+        mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'wily'}
         self.assertEqual(percona_utils.determine_packages(),
-                         ['percona-xtradb-cluster-server-5.6',
-                          'mysql-client-5.6'])
+                         ['percona-xtradb-cluster-server-5.6'])
 
     @mock.patch.object(percona_utils, 'lsb_release')
-    def test_packages_le_utopic(self, mock_lsb_release):
-        mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'utopic'}
+    def test_packages_gt_wily(self, mock_lsb_release):
+        mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'xenial'}
+        self.assertEqual(percona_utils.determine_packages(),
+                         ['percona-xtradb-cluster-server-5.6'])
+
+    @mock.patch.object(percona_utils, 'lsb_release')
+    def test_packages_lt_wily(self, mock_lsb_release):
+        mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'trusty'}
         self.assertEqual(percona_utils.determine_packages(),
                          ['percona-xtradb-cluster-server-5.5',
                           'percona-xtradb-cluster-client-5.5'])
