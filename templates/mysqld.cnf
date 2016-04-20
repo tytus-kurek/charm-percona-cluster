@@ -81,6 +81,8 @@ innodb_buffer_pool_size = {{ innodb_buffer_pool_size }}
 #
 # * Galera
 #
+wsrep_provider=/usr/lib/libgalera_smm.so
+
 # Add address of other cluster nodes here
 {% if not clustered -%}
 # Empty gcomm address is being used when cluster is getting bootstrapped
