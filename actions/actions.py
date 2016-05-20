@@ -8,12 +8,10 @@ from time import gmtime, strftime
 
 sys.path.append('hooks')
 
-from charmhelpers.core.host import service_pause, service_resume
 from charmhelpers.core.hookenv import (
     action_get,
     action_set,
     action_fail,
-    status_set,
     config,
 )
 
@@ -44,10 +42,10 @@ def resume(args):
     config_changed()
 
 
-def backup():
+def backup(args):
     basedir = (action_get("basedir")).lower()
-    compress = (action_get("compress"))
-    incremental = (action_get("incremental"))
+    compress = action_get("compress")
+    incremental = action_get("incremental")
     sstpw = config("sst-password")
     optionlist = []
 
@@ -57,16 +55,17 @@ def backup():
         os.makedirs(basedir)
 
     # Build a list of options to pass to innobackupex
-    if compress is "true":
+    if compress:
         optionlist.append("--compress")
 
-    if incremental is "true":
+    if incremental:
         optionlist.append("--incremental")
 
     try:
         subprocess.check_call(
             ['innobackupex', '--compact', '--galera-info', '--rsync',
-             basedir, '--user=sstuser', '--password=' + sstpw] + optionlist)
+             basedir, '--user=sstuser',
+             '--password={}'.format(sstpw)] + optionlist)
         action_set({
             'time-completed': (strftime("%Y-%m-%d %H:%M:%S", gmtime())),
             'outcome': 'Success'}
