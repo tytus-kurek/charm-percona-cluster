@@ -158,3 +158,32 @@ options:
     description: |
       Apply system hardening. Supports a space-delimited list of modules
       to run. Supported modules currently include os, ssh, apache and mysql.
+  enable-binlogs:
+    default: False
+    type: boolean
+    description: |
+      Turns on MySQL binary logs. The placement of the logs is controlled with
+      the binlogs_path config option.
+  binlogs-path:
+    default: /var/log/mysql/mysql-bin.log
+    type: string
+    description: |
+      Location on the filesystem where binlogs are going to be placed.
+      Default mimics what mysql-common package would do for mysql.
+      Make sure you do not put binlogs inside mysql datadir (/var/lib/mysql/)!
+  binlogs-max-size:
+    default: 100M
+    type: string
+    description: |
+      Sets the max_binlog_size mysql configuration option, which will limit the
+      size of the binary log files. The server will automatically rotate binlgos
+      after they grow to be bigger than this value.
+      Keep in mind that transactions are never split between binary logs, so
+      therefore binary logs might get larger than configured value.
+  binlogs-expire-days:
+    default: 10
+    type: int
+    description: |
+      Sets the expire_logs_days mysql configuration option, which will make
+      mysql server automatically remove logs older than configured number of
+      days.

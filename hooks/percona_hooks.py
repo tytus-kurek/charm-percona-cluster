@@ -90,6 +90,7 @@ from percona_utils import (
     assess_status,
     register_configs,
     resolve_cnf_file,
+    create_binlogs_directory,
 )
 
 
@@ -115,8 +116,6 @@ def install():
         add_source(config('source'), config('key'))
 
     configure_mysql_root_password(config('root-password'))
-    # Render base configuration (no cluster)
-    render_config()
     apt_update(fatal=True)
     apt_install(determine_packages(), fatal=True)
     configure_sstuser(config('sst-password'))
@@ -138,6 +137,10 @@ def render_config(clustered=False, hosts=[]):
         'innodb_file_per_table': config('innodb-file-per-table'),
         'table_open_cache': config('table-open-cache'),
         'lp1366997_workaround': config('lp1366997-workaround'),
+        'binlogs_path': config('binlogs-path'),
+        'enable_binlogs': config('enable-binlogs'),
+        'binlogs_max_size': config('binlogs-max-size'),
+        'binlogs_expire_days': config('binlogs-expire-days'),
     }
 
     if config('prefer-ipv6'):
@@ -169,9 +172,11 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     """
     pre_hash = file_hash(resolve_cnf_file())
     render_config(clustered, hosts)
+    create_binlogs_directory()
     update_db_rels = False
     if file_hash(resolve_cnf_file()) != pre_hash or bootstrap:
         if bootstrap:
+            service('stop', 'mysql')
             service('bootstrap-pxc', 'mysql')
             # NOTE(dosaboy): this will not actually do anything if no cluster
             # relation id exists yet.

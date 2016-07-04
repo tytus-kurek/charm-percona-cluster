@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # test percona-cluster (1 node)
 import basic_deployment
 
@@ -33,7 +33,7 @@ class MultiNode(basic_deployment.BasicDeployment):
         super(MultiNode, self).run()
         got = self.get_cluster_size()
         msg = "Percona cluster unexpected size (wanted=%s, got=%s)" % (1, got)
-        assert got == '1', msg
+        assert got in ('0', '1'), msg
 
 
 if __name__ == "__main__":

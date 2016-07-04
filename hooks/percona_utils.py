@@ -8,7 +8,8 @@ import shutil
 import uuid
 
 from charmhelpers.core.host import (
-    lsb_release
+    lsb_release,
+    mkdir
 )
 from charmhelpers.core.hookenv import (
     charm_dir,
@@ -517,3 +518,14 @@ def _pause_resume_helper(f, configs):
     f(assess_status_func(configs),
       services=services(),
       ports=None)
+
+
+def create_binlogs_directory():
+    binlogs_directory = os.path.dirname(config('binlogs-path'))
+    data_dir = resolve_data_dir() + '/'
+    if binlogs_directory.startswith(data_dir):
+        raise Exception("Configured binlogs directory (%s) must not be inside "
+                        "mysql data dir" % (binlogs_directory))
+
+    if not os.path.isdir(binlogs_directory):
+        mkdir(binlogs_directory, 'mysql', 'mysql', 0o750)
