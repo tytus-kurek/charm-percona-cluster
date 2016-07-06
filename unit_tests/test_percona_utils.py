@@ -100,37 +100,76 @@ class UtilsTests(unittest.TestCase):
         mock_rel_get.assert_called_with(rid=1, unit=2)
         self.assertEqual(hosts, ['hostA', 'hostA'])
 
-    @mock.patch("percona_utils.get_ipv6_addr")
-    @mock.patch("percona_utils.log")
-    @mock.patch("percona_utils.config")
-    @mock.patch("percona_utils.update_hosts_file")
-    @mock.patch("percona_utils.get_host_ip")
-    @mock.patch("percona_utils.relation_get")
-    @mock.patch("percona_utils.related_units")
-    @mock.patch("percona_utils.relation_ids")
+    @mock.patch.object(percona_utils, 'get_ipv6_addr')
+    @mock.patch.object(percona_utils, 'log')
+    @mock.patch.object(percona_utils, 'config')
+    @mock.patch.object(percona_utils, 'update_hosts_file')
+    @mock.patch.object(percona_utils, 'get_host_ip')
+    @mock.patch.object(percona_utils, 'relation_get')
+    @mock.patch.object(percona_utils, 'related_units')
+    @mock.patch.object(percona_utils, 'relation_ids')
     def test_get_cluster_hosts_ipv6(self, mock_rel_ids, mock_rel_units,
                                     mock_rel_get, mock_get_host_ip,
                                     mock_update_hosts_file, mock_config,
                                     mock_log, mock_get_ipv6_addr):
         ipv6addr = '2001:db8:1:0:f816:3eff:fe79:cd'
         mock_get_ipv6_addr.return_value = [ipv6addr]
-        mock_rel_ids.return_value = [1, 2]
-        mock_rel_units.return_value = [3, 4]
+        mock_rel_ids.return_value = [88]
+        mock_rel_units.return_value = [1, 2]
         mock_get_host_ip.return_value = 'hostA'
 
         def _mock_rel_get(*args, **kwargs):
-            return {'private-address': '0.0.0.0',
-                    'hostname': 'hostB'}
+            host_suffix = 'BC'
+            id = kwargs.get('unit')
+            hostname = "host{}".format(host_suffix[id - 1])
+            return {'private-address': '10.0.0.{}'.format(id + 1),
+                    'hostname': hostname}
 
+        config = {'prefer-ipv6': True}
         mock_rel_get.side_effect = _mock_rel_get
-        mock_config.side_effect = lambda k: True
+        mock_config.side_effect = lambda k: config.get(k)
 
         hosts = percona_utils.get_cluster_hosts()
 
         mock_update_hosts_file.assert_called_with({ipv6addr: 'hostA',
-                                                   '0.0.0.0': 'hostB'})
-        mock_rel_get.assert_called_with(rid=2, unit=4)
-        self.assertEqual(hosts, ['hostA', 'hostB'])
+                                                   '10.0.0.2': 'hostB',
+                                                   '10.0.0.3': 'hostC'})
+        mock_rel_get.assert_has_calls([mock.call(rid=88, unit=1),
+                                       mock.call(rid=88, unit=2)])
+        self.assertEqual(hosts, ['hostA', 'hostB', 'hostC'])
+
+    @mock.patch.object(percona_utils, 'get_address_in_network')
+    @mock.patch.object(percona_utils, 'log')
+    @mock.patch.object(percona_utils, 'config')
+    @mock.patch.object(percona_utils, 'relation_get')
+    @mock.patch.object(percona_utils, 'related_units')
+    @mock.patch.object(percona_utils, 'relation_ids')
+    def test_get_cluster_hosts_w_cluster_network(self, mock_rel_ids,
+                                                 mock_rel_units,
+                                                 mock_rel_get,
+                                                 mock_config,
+                                                 mock_log,
+                                                 mock_get_address_in_network):
+        mock_rel_ids.return_value = [88]
+        mock_rel_units.return_value = [1, 2]
+        mock_get_address_in_network.return_value = '10.100.0.1'
+
+        def _mock_rel_get(*args, **kwargs):
+            host_suffix = 'BC'
+            unit = kwargs.get('unit')
+            hostname = "host{}".format(host_suffix[unit - 1])
+            return {'private-address': '10.0.0.{}'.format(unit + 1),
+                    'cluster-address': '10.100.0.{}'.format(unit + 1),
+                    'hostname': hostname}
+
+        config = {'cluster-network': '10.100.0.0/24'}
+        mock_rel_get.side_effect = _mock_rel_get
+        mock_config.side_effect = lambda k: config.get(k)
+
+        hosts = percona_utils.get_cluster_hosts()
+        mock_rel_get.assert_has_calls([mock.call(rid=88, unit=1),
+                                       mock.call(rid=88, unit=2)])
+        self.assertEqual(hosts, ['10.100.0.1', '10.100.0.2', '10.100.0.3'])
 
     @mock.patch.object(percona_utils, 'log', lambda *args, **kwargs: None)
     @mock.patch.object(percona_utils, 'related_units')

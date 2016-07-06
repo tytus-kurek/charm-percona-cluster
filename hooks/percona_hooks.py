@@ -315,13 +315,28 @@ def config_changed():
 
 @hooks.hook('cluster-relation-joined')
 def cluster_joined():
+    relation_settings = {}
+
     if config('prefer-ipv6'):
         addr = get_ipv6_addr(exc_list=[config('vip')])[0]
         relation_settings = {'private-address': addr,
                              'hostname': socket.gethostname()}
-        log("Setting cluster relation: '%s'" % (relation_settings),
-            level=INFO)
-        relation_set(relation_settings=relation_settings)
+
+    cluster_network = config('cluster-network')
+    if cluster_network:
+        cluster_addr = get_address_in_network(cluster_network, fatal=True)
+        relation_settings['cluster-address'] = cluster_addr
+    else:
+        try:
+            cluster_addr = network_get_primary_address('cluster')
+            relation_settings['cluster-address'] = cluster_addr
+        except NotImplementedError:
+            # NOTE(jamespage): skip - fallback to previous behaviour
+            pass
+
+    log("Setting cluster relation: '%s'" % (relation_settings),
+        level=INFO)
+    relation_set(relation_settings=relation_settings)
 
     # Ensure all new peers are aware
     cluster_state_uuid = relation_get('bootstrap-uuid', unit=local_unit())
@@ -341,11 +356,14 @@ def cluster_changed():
     rdata = relation_get()
     inc_list = []
     for attr in rdata.iterkeys():
-        if attr not in ['hostname', 'private-address', 'public-address']:
+        if attr not in ['hostname', 'private-address', 'cluster-address',
+                        'public-address']:
             inc_list.append(attr)
+
     peer_echo(includes=inc_list)
     # NOTE(jamespage): deprecated - leader-election
 
+    cluster_joined()
     config_changed()
 
 

@@ -29,13 +29,15 @@ from charmhelpers.core.hookenv import (
     ERROR,
     cached,
     status_set,
+    network_get_primary_address,
 )
 from charmhelpers.fetch import (
     apt_install,
     filter_installed_packages
 )
 from charmhelpers.contrib.network.ip import (
-    get_ipv6_addr
+    get_address_in_network,
+    get_ipv6_addr,
 )
 from charmhelpers.contrib.database.mysql import (
     MySQLHelper,
@@ -148,34 +150,46 @@ def is_sufficient_peers():
 
 def get_cluster_hosts():
     hosts_map = {}
-    hostname = get_host_ip()
-    hosts = [hostname]
+
+    if config('cluster-network'):
+        hostname = get_address_in_network(config('cluster-network'),
+                                          fatal=True)
+    else:
+        try:
+            hostname = network_get_primary_address('cluster')
+        except NotImplementedError:
+            # NOTE(jamespage): skip - fallback to previous behaviour
+            hostname = get_host_ip()
+
     # We need to add this localhost dns name to /etc/hosts along with peer
     # hosts to ensure percona gets consistently resolved addresses.
     if config('prefer-ipv6'):
         addr = get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
         hosts_map = {addr: hostname}
 
+    hosts = [hostname]
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
             rdata = relation_get(unit=unit, rid=relid)
-            private_address = rdata.get('private-address')
+            # NOTE(dosaboy): see LP: #1599447
+            cluster_address = rdata.get('cluster-address',
+                                        rdata.get('private-address'))
             if config('prefer-ipv6'):
                 hostname = rdata.get('hostname')
                 if not hostname or hostname in hosts:
                     log("(unit=%s) Ignoring hostname '%s' provided by cluster "
                         "relation for addr %s" %
-                        (unit, hostname, private_address), level=DEBUG)
+                        (unit, hostname, cluster_address), level=DEBUG)
                     continue
                 else:
                     log("(unit=%s) hostname '%s' provided by cluster relation "
-                        "for addr %s" % (unit, hostname, private_address),
+                        "for addr %s" % (unit, hostname, cluster_address),
                         level=DEBUG)
 
-                hosts_map[private_address] = hostname
+                hosts_map[cluster_address] = hostname
                 hosts.append(hostname)
             else:
-                hosts.append(get_host_ip(private_address))
+                hosts.append(get_host_ip(cluster_address))
 
     if hosts_map:
         update_hosts_file(hosts_map)
