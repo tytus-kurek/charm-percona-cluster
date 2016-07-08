@@ -25,6 +25,7 @@ from charmhelpers.core.hookenv import (
     WARNING,
     is_leader,
     network_get_primary_address,
+    charm_name,
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -52,6 +53,7 @@ from charmhelpers.contrib.hahelpers.cluster import (
     oldest_peer,
     DC_RESOURCE_NAME,
     peer_units,
+    get_hacluster_config,
 )
 from charmhelpers.payload.execd import execd_preinstall
 from charmhelpers.contrib.network.ip import (
@@ -67,6 +69,9 @@ from charmhelpers.contrib.hardening.harden import harden
 from charmhelpers.contrib.hardening.mysql.checks import run_mysql_checks
 from charmhelpers.contrib.openstack.utils import (
     is_unit_paused_set,
+)
+from charmhelpers.contrib.openstack.ha.utils import (
+    update_dns_ha_resource_params,
 )
 
 from percona_utils import (
@@ -586,46 +591,55 @@ def shared_db_changed(relation_id=None, unit=None):
 
 
 @hooks.hook('ha-relation-joined')
-def ha_relation_joined():
-    vip = config('vip')
-    vip_iface = get_iface_for_address(vip) or config('vip_iface')
-    vip_cidr = get_netmask_for_address(vip) or config('vip_cidr')
-    corosync_bindiface = config('ha-bindiface')
-    corosync_mcastport = config('ha-mcastport')
-
-    if None in [vip, vip_cidr, vip_iface]:
-        log('Insufficient VIP information to configure cluster')
-        sys.exit(1)
-
-    if config('prefer-ipv6'):
-        res_mysql_vip = 'ocf:heartbeat:IPv6addr'
-        vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
-                     (vip, vip_cidr, vip_iface)
-    else:
-        res_mysql_vip = 'ocf:heartbeat:IPaddr2'
-        vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
-                     (vip, vip_cidr, vip_iface)
-
-    resources = {'res_mysql_vip': res_mysql_vip,
-                 'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
-
+def ha_relation_joined(relation_id=None):
+    cluster_config = get_hacluster_config()
     sstpsswd = config('sst-password')
-    resource_params = {'res_mysql_vip': vip_params,
-                       'res_mysql_monitor':
+    resources = {'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
+    resource_params = {'res_mysql_monitor':
                        RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
-    groups = {'grp_percona_cluster': 'res_mysql_vip'}
+
+    if config('dns-ha'):
+        update_dns_ha_resource_params(relation_id=relation_id,
+                                      resources=resources,
+                                      resource_params=resource_params)
+        group_name = 'grp_{}_hostnames'.format(charm_name())
+        groups = {group_name: 'res_{}_access_hostname'.format(charm_name())}
+
+    else:
+        vip_iface = (get_iface_for_address(cluster_config['vip']) or
+                     config('vip_iface'))
+        vip_cidr = (get_netmask_for_address(cluster_config['vip']) or
+                    config('vip_cidr'))
+
+        if config('prefer-ipv6'):
+            res_mysql_vip = 'ocf:heartbeat:IPv6addr'
+            vip_params = 'params ipv6addr="%s" cidr_netmask="%s" nic="%s"' % \
+                         (cluster_config['vip'], vip_cidr, vip_iface)
+        else:
+            res_mysql_vip = 'ocf:heartbeat:IPaddr2'
+            vip_params = 'params ip="%s" cidr_netmask="%s" nic="%s"' % \
+                         (cluster_config['vip'], vip_cidr, vip_iface)
+
+        resources['res_mysql_vip'] = res_mysql_vip
+
+        resource_params['res_mysql_vip'] = vip_params
+
+        group_name = 'grp_percona_cluster'
+        groups = {group_name: 'res_mysql_vip'}
 
     clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
 
-    colocations = {'vip_mysqld': 'inf: grp_percona_cluster cl_mysql_monitor'}
+    colocations = {'colo_percona_cluster': 'inf: {} cl_mysql_monitor'
+                                           ''.format(group_name)}
 
     locations = {'loc_percona_cluster':
-                 'grp_percona_cluster rule inf: writable eq 1'}
+                 '{} rule inf: writable eq 1'
+                 ''.format(group_name)}
 
     for rel_id in relation_ids('ha'):
         relation_set(relation_id=rel_id,
-                     corosync_bindiface=corosync_bindiface,
-                     corosync_mcastport=corosync_mcastport,
+                     corosync_bindiface=cluster_config['ha-bindiface'],
+                     corosync_mcastport=cluster_config['ha-mcastport'],
                      resources=resources,
                      resource_params=resource_params,
                      groups=groups,

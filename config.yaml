@@ -79,6 +79,12 @@ options:
       Minimum number of units expected to exist before charm will attempt to
       bootstrap percona cluster. If no value is provided this setting is
       ignored.
+  dns-ha:
+    type: boolean
+    default: False
+    description: |
+        Use DNS HA with MAAS 2.0. Note if this is set do not set vip
+        settings below.
   vip:
     type: string
     default:
@@ -114,6 +120,11 @@ options:
       The IP address and netmask of the 'access' network (e.g., 192.168.0.0/24)
       .
       This network will be used for access to database services.
+  os-access-hostname:
+    type: string
+    default:
+    description: |
+      The hostname or address of the access endpoint for percona-cluster.
   prefer-ipv6:
     type: boolean
     default: False

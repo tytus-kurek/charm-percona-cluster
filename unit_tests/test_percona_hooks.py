@@ -28,25 +28,15 @@ TO_PATCH = ['log', 'config',
             'unit_get',
             'get_host_ip',
             'is_clustered',
-            'get_ipv6_addr']
+            'get_ipv6_addr',
+            'get_hacluster_config',
+            'update_dns_ha_resource_params']
 
 
 class TestHARelation(CharmTestCase):
     def setUp(self):
         CharmTestCase.setUp(self, hooks, TO_PATCH)
         self.network_get_primary_address.side_effect = NotImplementedError
-
-    @mock.patch('sys.exit')
-    def test_relation_not_configured(self, exit_):
-        self.config.return_value = None
-
-        class MyError(Exception):
-            pass
-
-        def f(x):
-            raise MyError(x)
-        exit_.side_effect = f
-        self.assertRaises(MyError, hooks.ha_relation_joined)
 
     def test_resources(self):
         self.relation_ids.return_value = ['ha:1']
@@ -59,6 +49,11 @@ class TestHARelation(CharmTestCase):
         self.get_iface_for_address.return_value = None
         self.test_config.set('vip', '10.0.3.3')
         self.test_config.set('sst-password', password)
+        self.get_hacluster_config.return_value = {
+            'vip': '10.0.3.3',
+            'ha-bindiface': 'eth0',
+            'ha-mcastport': 5490,
+        }
 
         def f(k):
             return self.test_config.get(k)
@@ -77,7 +72,7 @@ class TestHARelation(CharmTestCase):
 
         clones = {'cl_mysql_monitor': 'res_mysql_monitor meta interleave=true'}
 
-        colocations = {'vip_mysqld': 'inf: grp_percona_cluster cl_mysql_monitor'}  # noqa
+        colocations = {'colo_percona_cluster': 'inf: grp_percona_cluster cl_mysql_monitor'}  # noqa
 
         locations = {'loc_percona_cluster':
                      'grp_percona_cluster rule inf: writable eq 1'}
@@ -101,6 +96,11 @@ class TestHARelation(CharmTestCase):
         self.test_config.set('vip', '10.0.3.3')
         self.test_config.set('vip_cidr', '16')
         self.test_config.set('vip_iface', 'eth0')
+        self.get_hacluster_config.return_value = {
+            'vip': '10.0.3.3',
+            'ha-bindiface': 'eth0',
+            'ha-mcastport': 5490,
+        }
 
         def f(k):
             return self.test_config.get(k)
@@ -130,6 +130,11 @@ class TestHARelation(CharmTestCase):
         self.test_config.set('vip', '10.0.3.3')
         self.test_config.set('vip_cidr', '16')
         self.test_config.set('vip_iface', 'eth1')
+        self.get_hacluster_config.return_value = {
+            'vip': '10.0.3.3',
+            'ha-bindiface': 'eth1',
+            'ha-mcastport': 5490,
+        }
 
         def f(k):
             return self.test_config.get(k)

@@ -6,6 +6,8 @@ include:
     - fetch
     - contrib.hahelpers.cluster
     - contrib.openstack.utils
+    - contrib.openstack.ip
+    - contrib.openstack.ha.utils
     - contrib.openstack.exceptions
     - contrib.storage.linux
     - contrib.python.packages
