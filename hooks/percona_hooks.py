@@ -27,7 +27,6 @@ from charmhelpers.core.hookenv import (
     network_get_primary_address,
 )
 from charmhelpers.core.host import (
-    service,
     service_restart,
     service_start,
     file_hash,
@@ -91,6 +90,7 @@ from percona_utils import (
     register_configs,
     resolve_cnf_file,
     create_binlogs_directory,
+    bootstrap_pxc,
 )
 
 
@@ -176,8 +176,7 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     update_db_rels = False
     if file_hash(resolve_cnf_file()) != pre_hash or bootstrap:
         if bootstrap:
-            service('stop', 'mysql')
-            service('bootstrap-pxc', 'mysql')
+            bootstrap_pxc()
             # NOTE(dosaboy): this will not actually do anything if no cluster
             # relation id exists yet.
             notify_bootstrapped()

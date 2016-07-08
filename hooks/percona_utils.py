@@ -9,7 +9,8 @@ import uuid
 
 from charmhelpers.core.host import (
     lsb_release,
-    mkdir
+    mkdir,
+    service,
 )
 from charmhelpers.core.hookenv import (
     charm_dir,
@@ -27,6 +28,7 @@ from charmhelpers.core.hookenv import (
     WARNING,
     ERROR,
     cached,
+    status_set,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -348,6 +350,27 @@ def is_bootstrapped():
         return True
 
     return False
+
+
+def bootstrap_pxc():
+    """Bootstrap PXC
+    On systemd systems systemctl bootstrap-pxc mysql does not work.
+    Run service mysql bootstrap-pxc to bootstrap."""
+    service('stop', 'mysql')
+    bootstrapped = service('bootstrap-pxc', 'mysql')
+    if not bootstrapped:
+        try:
+            cmd = ['service', 'mysql', 'bootstrap-pxc']
+            subprocess.check_call(cmd)
+        except subprocess.CalledProcessError as e:
+            msg = 'Bootstrap PXC failed'
+            error_msg = '{}: {}'.format(msg, e)
+            status_set('blocked', msg)
+            log(error_msg, ERROR)
+            raise Exception(error_msg)
+        # To make systemd aware mysql is running after a bootstrap
+        service('start', 'mysql')
+    log("Bootstrap PXC Succeeded", DEBUG)
 
 
 def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
