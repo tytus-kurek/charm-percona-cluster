@@ -20,7 +20,7 @@ class SingleNode(basic_deployment.BasicDeployment):
     def run(self):
         super(SingleNode, self).run()
         assert self.is_pxc_bootstrapped(), "Cluster not bootstrapped"
-        sentry_unit = self.d.sentry.unit['percona-cluster/0']
+        sentry_unit = self.d.sentry['percona-cluster'][0]
 
         assert u.status_get(sentry_unit)[0] == "active"
 

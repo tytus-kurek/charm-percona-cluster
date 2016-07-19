@@ -11,8 +11,7 @@ class PauseResume(basic_deployment.BasicDeployment):
 
     def run(self):
         super(PauseResume, self).run()
-        uid = 'percona-cluster/0'
-        unit = self.d.sentry.unit[uid]
+        unit = self.d.sentry['percona-cluster'][0]
         assert self.is_mysqld_running(unit), 'mysql not running: %s' % uid
         assert utils.status_get(unit)[0] == "active"
 

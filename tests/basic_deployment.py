@@ -106,26 +106,21 @@ class BasicDeployment(OpenStackAmuletDeployment):
         else:
             self.master_unit = self.find_master(ha=False)
 
-        for i in range(self.units):
-            uid = 'percona-cluster/%d' % i
-            unit = self.d.sentry.unit[uid]
-            assert self.is_mysqld_running(unit), 'mysql not running: %s' % uid
+        for unit in self.d.sentry['percona-cluster']:
+            assert self.is_mysqld_running(unit), 'mysql not running: %s' % unit
 
     def find_master(self, ha=True):
-        for unit_id, unit in self.d.sentry.unit.items():
-            if not unit_id.startswith('percona-cluster/'):
-                continue
-
+        for unit in self.d.sentry['percona-cluster']:
             if not ha:
                 return unit
 
             # is the vip running here?
             output, code = unit.run('sudo ip a | grep "inet %s/"' % self.vip)
             print('---')
-            print(unit_id)
+            print(unit)
             print(output)
             if code == 0:
-                print('vip(%s) running in %s' % (self.vip, unit_id))
+                print('vip(%s) running in %s' % (self.vip, unit))
                 return unit
 
     def get_pcmkr_resources(self, unit=None):
