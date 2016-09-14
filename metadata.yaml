@@ -7,6 +7,10 @@ description: |
   synchronous replication extensions.
 tags:
   - databases
+series:
+  - xenial
+  - trusty
+  - yakkety
 provides:
   db:
     interface: mysql
