@@ -3,6 +3,7 @@ destination: hooks/charmhelpers
 include:
     - core
     - cli
+    - osplatform
     - fetch
     - contrib.hahelpers.cluster
     - contrib.openstack.utils

@@ -30,10 +30,12 @@ from charmhelpers.core.hookenv import (
     cached,
     status_set,
     network_get_primary_address,
+    application_version_set,
 )
 from charmhelpers.fetch import (
     apt_install,
-    filter_installed_packages
+    filter_installed_packages,
+    get_upstream_version,
 )
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
@@ -59,6 +61,7 @@ REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
 SEEDED_MARKER = "{data_dir}/seeded"
 HOSTS_FILE = '/etc/hosts'
+
 # NOTE(ajkavanagh) - this is 'required' for the pause/resume code for
 # maintenance mode, but is currently not populated as the
 # charm_check_function() checks whether the unit is working properly.
@@ -501,6 +504,7 @@ def assess_status(configs):
     @returns None - this function is executed for its side-effect
     """
     assess_status_func(configs)()
+    application_version_set(get_upstream_version(determine_packages()[0]))
 
 
 def assess_status_func(configs):

@@ -277,13 +277,24 @@ class TestAssessStatus(CharmTestCase):
         stat, _ = percona_utils.charm_check_func()
         assert stat == 'blocked'
 
-    def test_assess_status(self):
+    @mock.patch.object(percona_utils, 'determine_packages')
+    @mock.patch.object(percona_utils, 'application_version_set')
+    @mock.patch.object(percona_utils, 'get_upstream_version')
+    def test_assess_status(self, get_upstream_version,
+                           application_version_set,
+                           determine_packages):
+        get_upstream_version.return_value = '5.6.17'
+        determine_packages.return_value = ['percona-xtradb-cluster-server-5.6']
         with mock.patch.object(percona_utils, 'assess_status_func') as asf:
             callee = mock.MagicMock()
             asf.return_value = callee
             percona_utils.assess_status('test-config')
             asf.assert_called_once_with('test-config')
             callee.assert_called_once_with()
+            get_upstream_version.assert_called_with(
+                'percona-xtradb-cluster-server-5.6'
+            )
+            application_version_set.assert_called_with('5.6.17')
 
     @mock.patch.object(percona_utils, 'REQUIRED_INTERFACES')
     @mock.patch.object(percona_utils, 'services')
