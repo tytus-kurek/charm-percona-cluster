@@ -414,9 +414,13 @@ def get_db_host(client_hostname, interface='shared-db'):
     If vip(s) are configured, chooses first available.
     """
     vips = config('vip').split() if config('vip') else []
+    dns_ha = config('dns-ha')
     access_network = config('access-network')
     client_ip = get_host_ip(client_hostname)
-    if access_network:
+    if is_clustered() and dns_ha:
+        log("Using DNS HA hostname: {}".format(config('os-access-hostname')))
+        return config('os-access-hostname')
+    elif access_network:
         if is_address_in_network(access_network, client_ip):
             if is_clustered():
                 for vip in vips:

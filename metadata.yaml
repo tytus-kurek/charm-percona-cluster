@@ -11,6 +11,8 @@ series:
   - xenial
   - trusty
   - yakkety
+extra-bindings:
+  access:
 provides:
   db:
     interface: mysql
