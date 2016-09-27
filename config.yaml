@@ -42,10 +42,11 @@ options:
       percentage of system total memory allocated.
   max-connections:
     type: int
-    default: -1
+    default: 600
     description: |
       Maximum connections to allow. A value of -1 means use the server's
-      compiled-in default.
+      compiled-in default.  This is not typically that useful so the
+      charm will configure PXC with a default max-connections value of 600.
   wait-timeout:
     type: int
     default: -1
