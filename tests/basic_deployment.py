@@ -85,6 +85,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
         self._add_relations()
         self._configure_services()
         self._deploy()
+        self.d.sentry.wait()
 
         if self.units > 1:
             i = 0

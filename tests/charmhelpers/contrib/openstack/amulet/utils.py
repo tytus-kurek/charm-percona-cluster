@@ -28,6 +28,7 @@ import keystoneclient.v2_0 as keystone_client
 from keystoneclient.auth.identity import v3 as keystone_id_v3
 from keystoneclient import session as keystone_session
 from keystoneclient.v3 import client as keystone_client_v3
+from novaclient import exceptions
 
 import novaclient.client as nova_client
 import pika
@@ -306,10 +307,8 @@ class OpenStackAmuletUtils(AmuletUtils):
                                   password, tenant):
         """Authenticates admin user with cinder."""
         # NOTE(beisner): cinder python client doesn't accept tokens.
-        service_ip = \
-            keystone_sentry.relation('shared-db',
-                                     'mysql:shared-db')['private-address']
-        ept = "http://{}:5000/v2.0".format(service_ip.strip().decode('utf-8'))
+        keystone_ip = keystone_sentry.info['public-address']
+        ept = "http://{}:5000/v2.0".format(keystone_ip.strip().decode('utf-8'))
         return cinder_client.Client(username, password, tenant, ept)
 
     def authenticate_keystone_admin(self, keystone_sentry, user, password,
@@ -317,10 +316,9 @@ class OpenStackAmuletUtils(AmuletUtils):
                                     keystone_ip=None):
         """Authenticates admin user with the keystone admin endpoint."""
         self.log.debug('Authenticating keystone admin...')
-        unit = keystone_sentry
         if not keystone_ip:
-            keystone_ip = unit.relation('shared-db',
-                                        'mysql:shared-db')['private-address']
+            keystone_ip = keystone_sentry.info['public-address']
+
         base_ep = "http://{}:35357".format(keystone_ip.strip().decode('utf-8'))
         if not api_version or api_version == 2:
             ep = base_ep + "/v2.0"
@@ -379,6 +377,16 @@ class OpenStackAmuletUtils(AmuletUtils):
                                       key=password,
                                       tenant_name=tenant,
                                       auth_version='2.0')
+
+    def create_flavor(self, nova, name, ram, vcpus, disk, flavorid="auto",
+                      ephemeral=0, swap=0, rxtx_factor=1.0, is_public=True):
+        """Create the specified flavor."""
+        try:
+            nova.flavors.find(name=name)
+        except (exceptions.NotFound, exceptions.NoUniqueMatch):
+            self.log.debug('Creating flavor ({})'.format(name))
+            nova.flavors.create(name, ram, vcpus, disk, flavorid,
+                                ephemeral, swap, rxtx_factor, is_public)
 
     def create_cirros_image(self, glance, image_name):
         """Download the latest cirros image and upload it to glance,

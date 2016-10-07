@@ -1,11 +1,11 @@
-#!/usr/bin/env python3
-# test percona-cluster (1 node)
+#!/usr/bin/env python
+# test percona-cluster (multi node)
 import basic_deployment
 
 
 class MultiNode(basic_deployment.BasicDeployment):
     def __init__(self):
-        super(MultiNode, self).__init__(units=3)
+        super(MultiNode, self).__init__(units=3, series='zesty')
 
     def _get_configs(self):
         """Configure all of the services."""
@@ -13,7 +13,8 @@ class MultiNode(basic_deployment.BasicDeployment):
                        'root-password': 't00r',
                        'dataset-size': '512M',
                        'vip': self.vip,
-                       'min-cluster-size': 3}
+                       'min-cluster-size': 3,
+                       'ha-bindiface': 'ens2'}
 
         cfg_ha = {'debug': True,
                   'corosync_mcastaddr': '226.94.1.4',

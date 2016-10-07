@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 # test percona-cluster (3 nodes)
 
 import basic_deployment
@@ -13,8 +13,8 @@ class ThreeNode(basic_deployment.BasicDeployment):
         super(ThreeNode, self).run()
         # we are going to kill the master
         old_master = self.master_unit
-        print('stopping mysql in %s' % str(self.master_unit.info))
-        self.master_unit.run('sudo service mysql stop')
+        print('kill-9 mysqld in %s' % str(self.master_unit.info))
+        self.master_unit.run('sudo killall -9 mysqld')
 
         print('looking for the new master')
         i = 0
