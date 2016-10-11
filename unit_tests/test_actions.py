@@ -6,8 +6,8 @@ from test_utils import CharmTestCase
 
 # python-apt is not installed as part of test-requirements but is imported by
 # some charmhelpers modules so create a fake import.
-sys.modules['apt'] = mock.MagicMock()
-sys.modules['MySQLdb'] = mock.MagicMock()
+sys.modules['apt'] = mock.Mock()
+sys.modules['MySQLdb'] = mock.Mock()
 
 
 # we have to patch out harden decorator because hooks/percona_hooks.py gets

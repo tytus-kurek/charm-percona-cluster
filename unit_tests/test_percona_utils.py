@@ -286,7 +286,7 @@ class TestAssessStatus(CharmTestCase):
         get_upstream_version.return_value = '5.6.17'
         determine_packages.return_value = ['percona-xtradb-cluster-server-5.6']
         with mock.patch.object(percona_utils, 'assess_status_func') as asf:
-            callee = mock.MagicMock()
+            callee = mock.Mock()
             asf.return_value = callee
             percona_utils.assess_status('test-config')
             asf.assert_called_once_with('test-config')
@@ -322,7 +322,7 @@ class TestAssessStatus(CharmTestCase):
 
     @mock.patch.object(percona_utils, 'services')
     def test_pause_resume_helper(self, services):
-        f = mock.MagicMock()
+        f = mock.Mock()
         services.return_value = 's1'
         with mock.patch.object(percona_utils, 'assess_status_func') as asf:
             asf.return_value = 'assessor'

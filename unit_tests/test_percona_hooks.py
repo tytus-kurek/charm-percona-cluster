@@ -7,7 +7,7 @@ from test_utils import CharmTestCase
 sys.modules['MySQLdb'] = mock.Mock()
 # python-apt is not installed as part of test-requirements but is imported by
 # some charmhelpers modules so create a fake import.
-sys.modules['apt'] = mock.MagicMock()
+sys.modules['apt'] = mock.Mock()
 
 with mock.patch('charmhelpers.contrib.hardening.harden.harden') as mock_dec:
     mock_dec.side_effect = (lambda *dargs, **dkwargs: lambda f:
