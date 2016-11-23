@@ -192,3 +192,18 @@ class TestHostResolution(CharmTestCase):
         self.resolve_network_cidr.return_value = '192.168.20.2/24'
         self.assertEqual(hooks.get_db_host('myclient'), '192.168.20.200')
         self.network_get_primary_address.assert_called_with('shared-db')
+
+
+class TestNRPERelation(CharmTestCase):
+    def setUp(self):
+        patch_targets_nrpe = TO_PATCH[:]
+        patch_targets_nrpe.remove("update_nrpe_config")
+        patch_targets_nrpe.append("nrpe")
+        patch_targets_nrpe.append("apt_install")
+        CharmTestCase.setUp(self, hooks, patch_targets_nrpe)
+
+    def test_mysql_monitored(self):
+        """The mysql service is monitored by Nagios."""
+        hooks.update_nrpe_config()
+        self.nrpe.add_init_service_checks.assert_called_once_with(
+            mock.ANY, ["mysql"], mock.ANY)
