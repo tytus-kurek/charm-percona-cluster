@@ -72,6 +72,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
         configs = {'percona-cluster': cfg_percona}
         if self.units > 1:
+            cfg_ha['cluster_count'] = str(self.units)
             configs['hacluster'] = cfg_ha
 
         return configs
