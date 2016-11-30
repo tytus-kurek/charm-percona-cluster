@@ -128,9 +128,13 @@ def install():
         run_mysql_checks()
 
 
-def render_config(clustered=False, hosts=[]):
-    if not os.path.exists(os.path.dirname(resolve_cnf_file())):
-        os.makedirs(os.path.dirname(resolve_cnf_file()))
+def render_config(clustered=False, hosts=None):
+    if hosts is None:
+        hosts = []
+
+    config_file = resolve_cnf_file()
+    if not os.path.exists(os.path.dirname(config_file)):
+        os.makedirs(os.path.dirname(config_file))
 
     context = {
         'cluster_name': 'juju_cluster',
@@ -159,8 +163,8 @@ def render_config(clustered=False, hosts=[]):
         context['ipv6'] = False
 
     context.update(PerconaClusterHelper().parse_config())
-    render(os.path.basename(resolve_cnf_file()),
-           resolve_cnf_file(), context, perms=0o444)
+    render(os.path.basename(config_file),
+           config_file, context, perms=0o444)
 
 
 def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
@@ -175,11 +179,12 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     it is started so long as the new node to be added is guaranteed to have
     been restarted so as to apply the new config.
     """
-    pre_hash = file_hash(resolve_cnf_file())
+    config_file = resolve_cnf_file()
+    pre_hash = file_hash(config_file)
     render_config(clustered, hosts)
     create_binlogs_directory()
     update_db_rels = False
-    if file_hash(resolve_cnf_file()) != pre_hash or bootstrap:
+    if file_hash(config_file) != pre_hash or bootstrap:
         if bootstrap:
             bootstrap_pxc()
             # NOTE(dosaboy): this will not actually do anything if no cluster
@@ -217,7 +222,7 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
         if update_db_rels:
             update_shared_db_rels()
     else:
-        log("Config file '%s' unchanged", level=DEBUG)
+        log("Config file '{}' unchanged".format(config_file), level=DEBUG)
 
 
 def update_shared_db_rels():
