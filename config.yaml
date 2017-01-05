@@ -47,6 +47,13 @@ options:
       Maximum connections to allow. A value of -1 means use the server's
       compiled-in default.  This is not typically that useful so the
       charm will configure PXC with a default max-connections value of 600.
+      Note: Connections take up memory resources. Either at startup time with
+      performance-schema=True or during run time with performance-schema=False.
+      This value is a balance between connection exhaustion and memory
+      exhaustion.
+      Consult a MySQL memory calculator like http://www.mysqlcalculator.com/ to
+      understand memory resources consumed by connections.
+      See also performance-schema.
   wait-timeout:
     type: int
     default: -1
@@ -207,3 +214,17 @@ options:
       Sets the expire_logs_days mysql configuration option, which will make
       mysql server automatically remove logs older than configured number of
       days.
+  performance-schema:
+    default: False
+    type: boolean
+    description: |
+      The performance schema attempts to automatically size the values of
+      several of its parameters at server startup if they are not set
+      explicitly. When set to on (True) memory is allocated at startup time.
+      The implications of this is any memory related charm config options such
+      as max-connections and innodb-buffer-pool-size must be explicitly set for
+      the environment percona is running in or percona may fail to start.
+      Default to off (False) at startup time giving 5.5 like behavior. The
+      implication of this is one can set configuration values that could lead
+      to memory exhaustion during run time as memory is not allocated at
+      startup time.

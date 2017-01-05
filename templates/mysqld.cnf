@@ -115,6 +115,15 @@ wsrep_provider_options = {{ wsrep_provider_options }}
 {% endif %}
 
 #
+# * Performance Schema
+#
+{% if performance_schema -%}
+performance_schema=On
+{% else -%}
+performance_schema=Off
+{% endif %}
+
+#
 # * IPv6 SST configuration
 #
 {% if ipv6 -%}

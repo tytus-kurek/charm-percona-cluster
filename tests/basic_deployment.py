@@ -1,6 +1,7 @@
 import amulet
 import re
 import os
+import socket
 import time
 import telnetlib
 import yaml
@@ -41,7 +42,8 @@ class BasicDeployment(OpenStackAmuletDeployment):
            compatible with the local charm (e.g. stable or next).
            """
         this_service = {'name': 'percona-cluster',
-                        'units': self.units}
+                        'units': self.units,
+                        'constraints': {'mem': '3072M'}}
         other_services = []
         if self.units > 1:
             other_services.append({'name': 'hacluster'})
@@ -185,10 +187,10 @@ class BasicDeployment(OpenStackAmuletDeployment):
         try:
             telnetlib.Telnet(addr, port)
             return True
-        except TimeoutError:  # noqa this exception only available in py3
-            print("ERROR: could not connect to %s:%s" % (addr, port))
-            return False
-        except ConnectionRefusedError:  # noqa - also only in py3
-            print("ERROR: connection refused connecting to %s:%s" % (addr,
-                                                                     port))
+        except socket.error as e:
+            if e.errno == 113:
+                print("ERROR: could not connect to %s:%s" % (addr, port))
+            if e.errno == 111:
+                print("ERROR: connection refused connecting to %s:%s" % (addr,
+                                                                         port))
             return False

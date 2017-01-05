@@ -150,6 +150,7 @@ def render_config(clustered=False, hosts=None):
         'enable_binlogs': config('enable-binlogs'),
         'binlogs_max_size': config('binlogs-max-size'),
         'binlogs_expire_days': config('binlogs-expire-days'),
+        'performance_schema': config('performance-schema'),
     }
 
     if config('prefer-ipv6'):

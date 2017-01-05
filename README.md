@@ -49,6 +49,46 @@ deployment:
 
 A minimium cluster size of three units is recommended.
 
+Memory Configuration
+-------------------
+
+Percona Cluster is extremely memory sensitive. Setting memory values too low
+will give poor performance. Setting them too high will create problems that are
+very difficult to diagnose. Please take time to evaluate these settings for
+each deployment environment rather than copying and pasting bundle
+configurations.
+
+The Percona Cluster charm needs to be able to be deployed in small low memory
+development environments as well as high performance production environments.
+The charm configuration opinionated defaults favor the developer environment in
+order to ease initial testing. Production environments need to consider
+carefully the memory requirements for the hardware or cloud in use. Consult a
+MySQL memory calculator [2] to understand the implications of the values.
+
+Between the 5.5 and 5.6 releases a significant default was changed.
+The performance schema [1] defaulted to on for 5.6 and later. This allocates
+all the memory that would be required to handle max-connections plus several
+other memory settings. With 5.5 memory was allocated during runtime as needed.
+
+The charm now makes performance schema configurable and defaults to off (False).
+With the performance schema turned off memory is allocated when needed during
+run time. It is important to understand this can lead to run time memory
+exhaustion if the configuration values are set too high. Consult a MySQL memory
+calculator [2] to understand the implications of the values.
+
+Particularly consider the max-connections setting, this value is a balance
+between connection exhaustion and memory exhaustion. Occasionally connection
+exhaustion occurs in large production HA clouds with max-connections less than
+2000. The common practice became to set max-connections unrealistically high
+near 10k or 20k. In the move to 5.6 on Xenial this became a problem as Percona
+would fail to start up or behave erratically as memory exhaustion occurred on
+the host due to performance schema being turned on. Even with the default now
+turned off this value should be carefully considered against the production
+requirements and resources available.
+
+[1] http://dev.mysql.com/doc/relnotes/mysql/5.6/en/news-5-6-6.html#mysqld-5-6-6-performance-schema 
+[2] http://www.mysqlcalculator.com/
+
 
 HA/Clustering
 -------------
