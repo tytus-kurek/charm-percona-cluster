@@ -102,7 +102,12 @@ def setup_percona_repo():
     subprocess.check_call(['apt-key', 'add', KEY])
 
 
-def get_host_ip(hostname=None):
+def resolve_hostname_to_ip(hostname):
+    """Resolve hostname to IP
+
+    @param hostname: hostname to be resolved
+    @returns IP address
+    """
     try:
         import dns.resolver
     except ImportError:
@@ -110,12 +115,6 @@ def get_host_ip(hostname=None):
                     fatal=True)
         import dns.resolver
 
-    if config('prefer-ipv6'):
-        # Ensure we have a valid ipv6 address configured
-        get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
-        return socket.gethostname()
-
-    hostname = hostname or unit_get('private-address')
     try:
         # Test to see if already an IPv4 address
         socket.inet_aton(hostname)
@@ -154,23 +153,15 @@ def is_sufficient_peers():
 def get_cluster_hosts():
     hosts_map = {}
 
-    if config('cluster-network'):
-        hostname = get_address_in_network(config('cluster-network'),
-                                          fatal=True)
-    else:
-        try:
-            hostname = network_get_primary_address('cluster')
-        except NotImplementedError:
-            # NOTE(jamespage): skip - fallback to previous behaviour
-            hostname = get_host_ip()
+    local_cluster_address = get_cluster_host_ip()
 
     # We need to add this localhost dns name to /etc/hosts along with peer
     # hosts to ensure percona gets consistently resolved addresses.
     if config('prefer-ipv6'):
         addr = get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
-        hosts_map = {addr: hostname}
+        hosts_map = {addr: socket.gethostname()}
 
-    hosts = [hostname]
+    hosts = [local_cluster_address]
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
             rdata = relation_get(unit=unit, rid=relid)
@@ -192,7 +183,7 @@ def get_cluster_hosts():
                 hosts_map[cluster_address] = hostname
                 hosts.append(hostname)
             else:
-                hosts.append(get_host_ip(cluster_address))
+                hosts.append(resolve_hostname_to_ip(cluster_address))
 
     if hosts_map:
         update_hosts_file(hosts_map)
@@ -570,3 +561,24 @@ def create_binlogs_directory():
 
     if not os.path.isdir(binlogs_directory):
         mkdir(binlogs_directory, 'mysql', 'mysql', 0o750)
+
+
+def get_cluster_host_ip():
+    """Get the this host's IP address for use with percona cluster peers
+
+    @returns IP to pass to cluster peers
+    """
+
+    cluster_network = config('cluster-network')
+    if cluster_network:
+        cluster_addr = get_address_in_network(cluster_network, fatal=True)
+    else:
+        try:
+            cluster_addr = network_get_primary_address('cluster')
+        except NotImplementedError:
+            # NOTE(jamespage): fallback to previous behaviour
+            cluster_addr = resolve_hostname_to_ip(
+                unit_get('private-address')
+            )
+
+    return cluster_addr

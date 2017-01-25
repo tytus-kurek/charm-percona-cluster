@@ -26,7 +26,7 @@ TO_PATCH = ['log', 'config',
             'network_get_primary_address',
             'resolve_network_cidr',
             'unit_get',
-            'get_host_ip',
+            'resolve_hostname_to_ip',
             'is_clustered',
             'get_ipv6_addr',
             'get_hacluster_config',
@@ -165,7 +165,7 @@ class TestHostResolution(CharmTestCase):
         Ensure that with nothing other than defaults private-address is used
         '''
         self.unit_get.return_value = 'mydbhost'
-        self.get_host_ip.return_value = '10.0.0.2'
+        self.resolve_hostname_to_ip.return_value = '10.0.0.2'
         self.assertEqual(hooks.get_db_host('myclient'), 'mydbhost')
 
     def test_get_db_host_network_spaces(self):
@@ -173,7 +173,7 @@ class TestHostResolution(CharmTestCase):
         Ensure that if the shared-db relation is bound, its bound address
         is used
         '''
-        self.get_host_ip.return_value = '10.0.0.2'
+        self.resolve_hostname_to_ip.return_value = '10.0.0.2'
         self.network_get_primary_address.side_effect = None
         self.network_get_primary_address.return_value = '192.168.20.2'
         self.assertEqual(hooks.get_db_host('myclient'), '192.168.20.2')
@@ -184,7 +184,7 @@ class TestHostResolution(CharmTestCase):
         Ensure that if the shared-db relation is bound and the unit is
         clustered, that the correct VIP is chosen
         '''
-        self.get_host_ip.return_value = '10.0.0.2'
+        self.resolve_hostname_to_ip.return_value = '10.0.0.2'
         self.is_clustered.return_value = True
         self.test_config.set('vip', '10.0.0.100 192.168.20.200')
         self.network_get_primary_address.side_effect = None

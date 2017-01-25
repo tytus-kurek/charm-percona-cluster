@@ -73,23 +73,24 @@ class UtilsTests(unittest.TestCase):
         self.assertEqual(lines[1], "%s %s\n" % (map.items()[0]))
         self.assertEqual(lines[4], "%s %s\n" % (map.items()[3]))
 
+    @mock.patch("percona_utils.get_cluster_host_ip")
     @mock.patch("percona_utils.log")
     @mock.patch("percona_utils.config")
     @mock.patch("percona_utils.update_hosts_file")
-    @mock.patch("percona_utils.get_host_ip")
     @mock.patch("percona_utils.relation_get")
     @mock.patch("percona_utils.related_units")
     @mock.patch("percona_utils.relation_ids")
     def test_get_cluster_hosts(self, mock_rel_ids, mock_rel_units,
-                               mock_rel_get, mock_get_host_ip,
+                               mock_rel_get,
                                mock_update_hosts_file, mock_config,
-                               mock_log):
+                               mock_log,
+                               mock_get_cluster_host_ip):
         mock_rel_ids.return_value = [1]
         mock_rel_units.return_value = [2]
-        mock_get_host_ip.return_value = 'hostA'
+        mock_get_cluster_host_ip.return_value = '10.2.0.1'
 
         def _mock_rel_get(*args, **kwargs):
-            return {'private-address': '0.0.0.0'}
+            return {'private-address': '10.2.0.2'}
 
         mock_rel_get.side_effect = _mock_rel_get
         mock_config.side_effect = lambda k: False
@@ -98,25 +99,29 @@ class UtilsTests(unittest.TestCase):
 
         self.assertFalse(mock_update_hosts_file.called)
         mock_rel_get.assert_called_with(rid=1, unit=2)
-        self.assertEqual(hosts, ['hostA', 'hostA'])
+        self.assertEqual(hosts, ['10.2.0.1', '10.2.0.2'])
 
+    @mock.patch.object(percona_utils, 'socket')
+    @mock.patch("percona_utils.get_cluster_host_ip")
     @mock.patch.object(percona_utils, 'get_ipv6_addr')
     @mock.patch.object(percona_utils, 'log')
     @mock.patch.object(percona_utils, 'config')
     @mock.patch.object(percona_utils, 'update_hosts_file')
-    @mock.patch.object(percona_utils, 'get_host_ip')
     @mock.patch.object(percona_utils, 'relation_get')
     @mock.patch.object(percona_utils, 'related_units')
     @mock.patch.object(percona_utils, 'relation_ids')
     def test_get_cluster_hosts_ipv6(self, mock_rel_ids, mock_rel_units,
-                                    mock_rel_get, mock_get_host_ip,
+                                    mock_rel_get,
                                     mock_update_hosts_file, mock_config,
-                                    mock_log, mock_get_ipv6_addr):
+                                    mock_log, mock_get_ipv6_addr,
+                                    mock_get_cluster_host_ip,
+                                    mock_socket):
         ipv6addr = '2001:db8:1:0:f816:3eff:fe79:cd'
         mock_get_ipv6_addr.return_value = [ipv6addr]
         mock_rel_ids.return_value = [88]
         mock_rel_units.return_value = [1, 2]
-        mock_get_host_ip.return_value = 'hostA'
+        mock_get_cluster_host_ip.return_value = 'hostA'
+        mock_socket.gethostname.return_value = 'hostA'
 
         def _mock_rel_get(*args, **kwargs):
             host_suffix = 'BC'

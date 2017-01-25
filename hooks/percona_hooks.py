@@ -77,7 +77,7 @@ from charmhelpers.contrib.openstack.ha.utils import (
 from percona_utils import (
     determine_packages,
     setup_percona_repo,
-    get_host_ip,
+    resolve_hostname_to_ip,
     get_cluster_hosts,
     configure_sstuser,
     configure_mysql_root_password,
@@ -96,6 +96,7 @@ from percona_utils import (
     resolve_cnf_file,
     create_binlogs_directory,
     bootstrap_pxc,
+    get_cluster_host_ip,
 )
 
 
@@ -138,7 +139,7 @@ def render_config(clustered=False, hosts=None):
 
     context = {
         'cluster_name': 'juju_cluster',
-        'private_address': get_host_ip(),
+        'private_address': get_cluster_host_ip(),
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
         'sst_method': config('sst-method'),
@@ -328,17 +329,7 @@ def cluster_joined():
         relation_settings = {'private-address': addr,
                              'hostname': socket.gethostname()}
 
-    cluster_network = config('cluster-network')
-    if cluster_network:
-        cluster_addr = get_address_in_network(cluster_network, fatal=True)
-        relation_settings['cluster-address'] = cluster_addr
-    else:
-        try:
-            cluster_addr = network_get_primary_address('cluster')
-            relation_settings['cluster-address'] = cluster_addr
-        except NotImplementedError:
-            # NOTE(jamespage): skip - fallback to previous behaviour
-            pass
+    relation_settings['cluster-address'] = get_cluster_host_ip()
 
     log("Setting cluster relation: '%s'" % (relation_settings),
         level=INFO)
@@ -383,21 +374,16 @@ def db_changed(relation_id=None, unit=None, admin=None):
         relation_clear(relation_id)
         return
 
-    if is_clustered():
-        db_host = config('vip')
-    else:
-        if config('prefer-ipv6'):
-            db_host = get_ipv6_addr(exc_list=[config('vip')])[0]
-        else:
-            db_host = unit_get('private-address')
-
     if admin not in [True, False]:
         admin = relation_type() == 'db-admin'
+
     db_name, _ = remote_unit().split("/")
     username = db_name
     db_helper = get_db_helper()
     addr = relation_get('private-address', unit=unit, rid=relation_id)
     password = db_helper.configure_db(addr, db_name, username, admin=admin)
+
+    db_host = get_db_host(addr, interface=relation_type())
 
     relation_set(relation_id=relation_id,
                  relation_settings={
@@ -409,7 +395,7 @@ def db_changed(relation_id=None, unit=None, admin=None):
 
 
 def get_db_host(client_hostname, interface='shared-db'):
-    """Get address of local database host.
+    """Get address of local database host for use by db clients
 
     If an access-network has been configured, expect selected address to be
     on that network. If none can be found, revert to primary address.
@@ -417,16 +403,24 @@ def get_db_host(client_hostname, interface='shared-db'):
     If network spaces are supported (Juju >= 2.0), use network-get to
     retrieve the network binding for the interface.
 
+    If DNSHA is set pass os-access-hostname
+
     If vip(s) are configured, chooses first available.
+
+    @param client_hostname: hostname of client side relation setting hostname.
+                            Only used if access-network is configured
+    @param interface: Network space binding to check.
+                      Usually the relationship name.
+    @returns IP for use with db clients
     """
     vips = config('vip').split() if config('vip') else []
     dns_ha = config('dns-ha')
     access_network = config('access-network')
-    client_ip = get_host_ip(client_hostname)
     if is_clustered() and dns_ha:
         log("Using DNS HA hostname: {}".format(config('os-access-hostname')))
         return config('os-access-hostname')
     elif access_network:
+        client_ip = resolve_hostname_to_ip(client_hostname)
         if is_address_in_network(access_network, client_ip):
             if is_clustered():
                 for vip in vips:
@@ -463,6 +457,7 @@ def get_db_host(client_hostname, interface='shared-db'):
     if config('prefer-ipv6'):
         return get_ipv6_addr(exc_list=vips)[0]
 
+    # Last resort
     return unit_get('private-address')
 
 
@@ -523,7 +518,7 @@ def shared_db_changed(relation_id=None, unit=None):
         database = settings['database']
         username = settings['username']
 
-        normalized_address = get_host_ip(hostname)
+        normalized_address = resolve_hostname_to_ip(hostname)
         if access_network and not is_address_in_network(access_network,
                                                         normalized_address):
             # NOTE: for configurations using access-network, only setup
@@ -583,7 +578,7 @@ def shared_db_changed(relation_id=None, unit=None):
                 hostname = databases[db]['hostname']
                 username = databases[db]['username']
 
-                normalized_address = get_host_ip(hostname)
+                normalized_address = resolve_hostname_to_ip(hostname)
                 if (access_network and
                         not is_address_in_network(access_network,
                                                   normalized_address)):
