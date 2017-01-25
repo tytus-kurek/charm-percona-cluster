@@ -12,6 +12,10 @@ tmpdir          = /tmp
 lc-messages-dir = /usr/share/mysql
 skip-external-locking
 
+# Never resolve IP's to hostnames; it adds overhead
+# and is not really reliable for use with ACL's.
+skip-name-resolve
+
 #
 # * Networking
 #
