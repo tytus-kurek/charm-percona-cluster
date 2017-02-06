@@ -47,7 +47,7 @@ deployment:
 
     juju add-unit percona-cluster
 
-A minimium cluster size of three units is recommended.
+A minimum cluster size of three units is recommended.
 
 Memory Configuration
 -------------------
