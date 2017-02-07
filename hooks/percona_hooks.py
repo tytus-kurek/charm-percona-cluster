@@ -10,7 +10,6 @@ from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
     is_relation_made,
     log,
-    local_unit,
     relation_get,
     relation_set,
     relation_id,
@@ -26,6 +25,7 @@ from charmhelpers.core.hookenv import (
     is_leader,
     network_get_primary_address,
     charm_name,
+    leader_get,
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -50,9 +50,7 @@ from charmhelpers.contrib.database.mysql import (
 from charmhelpers.contrib.hahelpers.cluster import (
     is_elected_leader,
     is_clustered,
-    oldest_peer,
     DC_RESOURCE_NAME,
-    peer_units,
     get_hacluster_config,
 )
 from charmhelpers.payload.execd import execd_preinstall
@@ -87,7 +85,6 @@ from percona_utils import (
     get_db_helper,
     mark_seeded, seeded,
     install_mysql_ocf,
-    is_sufficient_peers,
     notify_bootstrapped,
     is_bootstrapped,
     get_wsrep_value,
@@ -97,6 +94,8 @@ from percona_utils import (
     create_binlogs_directory,
     bootstrap_pxc,
     get_cluster_host_ip,
+    client_node_is_ready,
+    leader_node_is_ready,
 )
 
 
@@ -228,23 +227,19 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
 
 
 def update_shared_db_rels():
-    for r_id in relation_ids('shared-db'):
-        for unit in related_units(r_id):
-            shared_db_changed(r_id, unit)
+    """ Upate client shared-db relations IFF ready
+    """
+    if leader_node_is_ready() or client_node_is_ready():
+        for r_id in relation_ids('shared-db'):
+            for unit in related_units(r_id):
+                shared_db_changed(r_id, unit)
 
 
 @hooks.hook('upgrade-charm')
 @harden()
 def upgrade():
-    check_bootstrap = False
-    try:
-        if is_leader():
-            check_bootstrap = True
-    except:
-        if oldest_peer(peer_units()):
-            check_bootstrap = True
 
-    if check_bootstrap and not is_bootstrapped() and is_sufficient_peers():
+    if leader_node_is_ready():
         # If this is the leader but we have not yet broadcast the cluster uuid
         # then do so now.
         wsrep_ready = get_wsrep_value('wsrep_ready') or ""
@@ -276,35 +271,17 @@ def config_changed():
     # applies if min-cluster-size is provided and is used to avoid extraneous
     # configuration changes and premature bootstrapping as the cluster is
     # deployed.
-    if is_sufficient_peers():
-        try:
-            # NOTE(jamespage): try with leadership election
-            if is_leader():
-                log("Leader unit - bootstrap required=%s" % (not bootstrapped),
-                    DEBUG)
-                render_config_restart_on_changed(clustered, hosts,
-                                                 bootstrap=not bootstrapped)
-            elif bootstrapped:
-                log("Cluster is bootstrapped - configuring mysql on this node",
-                    DEBUG)
-                render_config_restart_on_changed(clustered, hosts)
-            else:
-                log("Not configuring", DEBUG)
-
-        except NotImplementedError:
-            # NOTE(jamespage): fallback to legacy behaviour.
-            oldest = oldest_peer(peer_units())
-            if oldest:
-                log("Leader unit - bootstrap required=%s" % (not bootstrapped),
-                    DEBUG)
-                render_config_restart_on_changed(clustered, hosts,
-                                                 bootstrap=not bootstrapped)
-            elif bootstrapped:
-                log("Cluster is bootstrapped - configuring mysql on this node",
-                    DEBUG)
-                render_config_restart_on_changed(clustered, hosts)
-            else:
-                log("Not configuring", DEBUG)
+    if is_leader():
+        log("Leader unit - bootstrap required=%s" % (not bootstrapped),
+            DEBUG)
+        render_config_restart_on_changed(clustered, hosts,
+                                         bootstrap=not bootstrapped)
+    elif bootstrapped:
+        log("Cluster is bootstrapped - configuring mysql on this node",
+            DEBUG)
+        render_config_restart_on_changed(clustered, hosts)
+    else:
+        log("Not configuring", DEBUG)
 
     # Notify any changes to the access network
     update_shared_db_rels()
@@ -336,7 +313,7 @@ def cluster_joined():
     relation_set(relation_settings=relation_settings)
 
     # Ensure all new peers are aware
-    cluster_state_uuid = relation_get('bootstrap-uuid', unit=local_unit())
+    cluster_state_uuid = leader_get('bootstrap-uuid')
     if cluster_state_uuid:
         notify_bootstrapped(cluster_rid=relation_id(),
                             cluster_uuid=cluster_state_uuid)
@@ -486,7 +463,7 @@ def shared_db_changed(relation_id=None, unit=None):
             "until bootstrapped", DEBUG)
         return
 
-    if not is_elected_leader(DC_RESOURCE_NAME):
+    if not is_leader() and client_node_is_ready():
         # NOTE(jamespage): relation level data candidate
         log('Service is peered, clearing shared-db relation '
             'as this service unit is not the leader')
@@ -502,6 +479,10 @@ def shared_db_changed(relation_id=None, unit=None):
                              if 'password' in key.lower()]
                 if len(passwords) > 0:
                     relation_set(relation_id=rel_id, **peerdb_settings)
+        return
+
+    # Bail if leader is not ready
+    if not leader_node_is_ready():
         return
 
     settings = relation_get(unit=unit, rid=relation_id)
@@ -720,6 +701,7 @@ def main():
         hooks.execute(sys.argv)
     except UnregisteredHookError as e:
         log('Unknown hook {} - skipping.'.format(e))
+    update_shared_db_rels()
     assess_status(register_configs())
 
 

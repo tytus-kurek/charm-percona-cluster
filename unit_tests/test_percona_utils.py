@@ -10,6 +10,8 @@ import percona_utils
 
 from test_utils import CharmTestCase
 
+os.environ['JUJU_UNIT_NAME'] = 'percona-cluster/2'
+
 
 class UtilsTests(unittest.TestCase):
     def setUp(self):
@@ -176,22 +178,28 @@ class UtilsTests(unittest.TestCase):
                                        mock.call(rid=88, unit=2)])
         self.assertEqual(hosts, ['10.100.0.1', '10.100.0.2', '10.100.0.3'])
 
-    @mock.patch.object(percona_utils, 'log', lambda *args, **kwargs: None)
+    @mock.patch.object(percona_utils, 'is_leader')
     @mock.patch.object(percona_utils, 'related_units')
     @mock.patch.object(percona_utils, 'relation_ids')
     @mock.patch.object(percona_utils, 'config')
     def test_is_sufficient_peers(self, mock_config, mock_relation_ids,
-                                 mock_related_units):
+                                 mock_related_units, mock_is_leader):
+        mock_is_leader.return_value = False
         _config = {'min-cluster-size': None}
         mock_config.side_effect = lambda key: _config.get(key)
         self.assertTrue(percona_utils.is_sufficient_peers())
 
+        mock_is_leader.return_value = False
         mock_relation_ids.return_value = ['cluster:0']
         mock_related_units.return_value = ['test/0']
         _config = {'min-cluster-size': 3}
+        mock_config.side_effect = lambda key: _config.get(key)
         self.assertFalse(percona_utils.is_sufficient_peers())
 
+        mock_is_leader.return_value = False
         mock_related_units.return_value = ['test/0', 'test/1']
+        _config = {'min-cluster-size': 3}
+        mock_config.side_effect = lambda key: _config.get(key)
         self.assertTrue(percona_utils.is_sufficient_peers())
 
     @mock.patch.object(percona_utils, 'lsb_release')
@@ -235,15 +243,20 @@ class UtilsTests(unittest.TestCase):
 
 
 TO_PATCH = [
-    # 'status_set',
     'is_sufficient_peers',
     'is_bootstrapped',
     'config',
     'cluster_in_sync',
+    'is_leader',
+    'related_units',
+    'relation_ids',
+    'relation_get',
+    'leader_get',
+    'is_unit_paused_set',
 ]
 
 
-class TestAssessStatus(CharmTestCase):
+class UtilsTestsCTC(CharmTestCase):
     def setUp(self):
         CharmTestCase.setUp(self, percona_utils, TO_PATCH)
 
@@ -335,3 +348,102 @@ class TestAssessStatus(CharmTestCase):
             asf.assert_called_once_with('some-config')
             # ports=None whilst port checks are disabled.
             f.assert_called_once_with('assessor', services='s1', ports=None)
+
+    @mock.patch.object(percona_utils, 'is_sufficient_peers')
+    def test_cluster_ready(self, mock_is_sufficient_peers):
+
+        # Not sufficient number of peers
+        mock_is_sufficient_peers.return_value = False
+        self.assertFalse(percona_utils.cluster_ready())
+
+        # Not all cluster ready
+        mock_is_sufficient_peers.return_value = True
+        self.relation_ids.return_value = ['cluster:0']
+        self.related_units.return_value = ['test/0', 'test/1']
+        self.relation_get.return_value = False
+        _config = {'min-cluster-size': 3}
+        self.config.side_effect = lambda key: _config.get(key)
+        self.assertFalse(percona_utils.cluster_ready())
+
+        # All cluster ready
+        mock_is_sufficient_peers.return_value = True
+        self.relation_ids.return_value = ['cluster:0']
+        self.related_units.return_value = ['test/0', 'test/1']
+        self.relation_get.return_value = 'UUID'
+        _config = {'min-cluster-size': 3}
+        self.config.side_effect = lambda key: _config.get(key)
+        self.assertTrue(percona_utils.cluster_ready())
+
+        # Not all cluster ready no min-cluster-size
+        mock_is_sufficient_peers.return_value = True
+        self.relation_ids.return_value = ['cluster:0']
+        self.related_units.return_value = ['test/0', 'test/1']
+        self.relation_get.return_value = False
+        _config = {'min-cluster-size': None}
+        self.config.side_effect = lambda key: _config.get(key)
+        self.assertFalse(percona_utils.cluster_ready())
+
+        # All cluster ready no min-cluster-size
+        mock_is_sufficient_peers.return_value = True
+        self.relation_ids.return_value = ['cluster:0']
+        self.related_units.return_value = ['test/0', 'test/1']
+        self.relation_get.return_value = 'UUID'
+        _config = {'min-cluster-size': None}
+        self.config.side_effect = lambda key: _config.get(key)
+        self.assertTrue(percona_utils.cluster_ready())
+
+        # Assume single unit no-min-cluster-size
+        mock_is_sufficient_peers.return_value = True
+        self.relation_ids.return_value = []
+        self.related_units.return_value = []
+        self.relation_get.return_value = None
+        _config = {'min-cluster-size': None}
+        self.config.side_effect = lambda key: _config.get(key)
+        self.assertTrue(percona_utils.cluster_ready())
+
+    @mock.patch.object(percona_utils, 'cluster_ready')
+    def test_client_node_is_ready(self, mock_cluster_ready):
+        # Paused
+        self.is_unit_paused_set.return_value = True
+        self.assertFalse(percona_utils.client_node_is_ready())
+
+        # Cluster not ready
+        mock_cluster_ready.return_value = False
+        self.assertFalse(percona_utils.client_node_is_ready())
+
+        # Not ready
+        self.is_unit_paused_set.return_value = False
+        mock_cluster_ready.return_value = True
+        self.relation_ids.return_value = ['shared-db:0']
+        self.leader_get.return_value = {}
+        self.assertFalse(percona_utils.client_node_is_ready())
+
+        # Ready
+        self.is_unit_paused_set.return_value = False
+        mock_cluster_ready.return_value = True
+        self.relation_ids.return_value = ['shared-db:0']
+        self.leader_get.return_value = {'shared-db:0_password': 'password'}
+        self.assertTrue(percona_utils.client_node_is_ready())
+
+    @mock.patch.object(percona_utils, 'cluster_ready')
+    def test_leader_node_is_ready(self, mock_cluster_ready):
+        # Paused
+        self.is_unit_paused_set.return_value = True
+        self.assertFalse(percona_utils.leader_node_is_ready())
+
+        # Not leader
+        self.is_unit_paused_set.return_value = False
+        self.is_leader.return_value = False
+        self.assertFalse(percona_utils.leader_node_is_ready())
+
+        # Not cluster ready
+        self.is_unit_paused_set.return_value = False
+        self.is_leader.return_value = True
+        mock_cluster_ready.return_value = False
+        self.assertFalse(percona_utils.leader_node_is_ready())
+
+        # Leader ready
+        self.is_unit_paused_set.return_value = False
+        self.is_leader.return_value = True
+        mock_cluster_ready.return_value = True
+        self.assertTrue(percona_utils.leader_node_is_ready())
