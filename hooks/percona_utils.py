@@ -219,7 +219,8 @@ def configure_mysql_root_password(password):
     dconf = Popen(['debconf-set-selections'], stdin=PIPE)
     # Set both percona and mysql password options to cover
     # both upstream and distro packages.
-    packages = ["percona-server-server", "mysql-server"]
+    packages = ["percona-server-server", "mysql-server",
+                "percona-xtradb-cluster-server"]
     m_helper = get_db_helper()
     root_pass = m_helper.get_mysql_root_password(password)
     for package in packages:
