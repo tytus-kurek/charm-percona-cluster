@@ -31,6 +31,9 @@ from charmhelpers.core.hookenv import (
     status_set,
     network_get_primary_address,
     application_version_set,
+    is_leader,
+    leader_get,
+    leader_set,
 )
 from charmhelpers.fetch import (
     apt_install,
@@ -48,6 +51,7 @@ from charmhelpers.contrib.openstack.utils import (
     make_assess_status_func,
     pause_unit,
     resume_unit,
+    is_unit_paused_set,
 )
 
 # NOTE: python-mysqldb is installed by charmhelpers.contrib.database.mysql so
@@ -128,26 +132,38 @@ def resolve_hostname_to_ip(hostname):
 
 
 def is_sufficient_peers():
-    """If min-cluster-size has been provided, check that we have sufficient
-    number of peers to proceed with bootstrapping percona cluster.
+    """Sufficient number of expected peers to build a complete cluster
+
+    If min-cluster-size has been provided, check that we have sufficient
+    number of peers as expected for a complete cluster.
+
+    If not defined assume a single unit.
+
+    @returns boolean
     """
+
     min_size = config('min-cluster-size')
     if min_size:
-        size = 0
-        for rid in relation_ids('cluster'):
-            size = len(related_units(rid))
+        log("Checking for minimum of {} peer units".format(min_size),
+            level=DEBUG)
 
         # Include this unit
-        size += 1
-        if min_size > size:
-            log("Insufficient number of units to configure percona cluster "
-                "(expected=%s, got=%s)" % (min_size, size), level=INFO)
+        units = 1
+        for rid in relation_ids('cluster'):
+            units += len(related_units(rid))
+
+        if units < min_size:
+            log("Insufficient number of peer units to form cluster "
+                "(expected=%s, got=%s)" % (min_size, units), level=INFO)
             return False
         else:
-            log("Sufficient units available to configure percona cluster "
-                "(>=%s)" % (min_size), level=DEBUG)
-
-    return True
+            log("Sufficient number of peer units to form cluster {}"
+                "".format(min_size, level=DEBUG))
+            return True
+    else:
+        log("min-cluster-size is not defined, race conditions may occur if "
+            "this is not a single unit deployment.", level=WARNING)
+        return True
 
 
 def get_cluster_hosts():
@@ -339,9 +355,10 @@ def get_wsrep_value(key):
 
 
 def is_bootstrapped():
-    if not is_sufficient_peers():
-        return False
+    """ Check that this unit is bootstrapped
 
+    @returns boolean
+    """
     uuids = []
     rids = relation_ids('cluster') or []
     for rid in rids:
@@ -402,6 +419,8 @@ def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
         (cluster_uuid), DEBUG)
     for rid in rids:
         relation_set(relation_id=rid, **{'bootstrap-uuid': cluster_uuid})
+    if is_leader():
+        leader_set(**{'bootstrap-uuid': cluster_uuid})
 
 
 def cluster_in_sync():
@@ -583,3 +602,94 @@ def get_cluster_host_ip():
             )
 
     return cluster_addr
+
+
+def cluster_ready():
+    """Determine if each node in the cluster is ready and the cluster is
+    complete with the expected number of peers.
+
+    Once cluster_ready returns True it is safe to execute client relation
+    hooks. Having min-cluster-size set will guarantee cluster_ready will not
+    return True until the expected number of peers are clustered and ready.
+
+    If min-cluster-size is not set it must assume the cluster is ready in order
+    to allow for single unit deployments.
+
+    @returns boolean
+    """
+    min_size = config('min-cluster-size')
+    units = 1
+    for relation_id in relation_ids('cluster'):
+        units += len(related_units(relation_id))
+    if not min_size:
+        min_size = units
+
+    if not is_sufficient_peers():
+        return False
+    elif min_size > 1:
+        uuids = []
+        for relation_id in relation_ids('cluster'):
+            units = related_units(relation_id) or []
+            units.append(local_unit())
+            for unit in units:
+                if not relation_get(attribute='bootstrap-uuid',
+                                    rid=relation_id,
+                                    unit=unit):
+                    log("{} is not yet clustered".format(unit),
+                        DEBUG)
+                    return False
+                else:
+                    bootstrap_uuid = relation_get(attribute='bootstrap-uuid',
+                                                  rid=relation_id,
+                                                  unit=unit)
+                    if bootstrap_uuid:
+                        uuids.append(bootstrap_uuid)
+
+        if len(uuids) < min_size:
+            log("Fewer than minimum cluster size:{} percona units reporting "
+                "clustered".format(min_size),
+                DEBUG)
+            return False
+        elif len(set(uuids)) > 1:
+            raise Exception("Found inconsistent bootstrap uuids - %s"
+                            "".format((uuids)))
+        else:
+            log("All {} percona units reporting clustered"
+                "".format(min_size),
+                DEBUG)
+            return True
+
+    log("Must assume this is a single unit returning 'cluster' ready", DEBUG)
+    return True
+
+
+def client_node_is_ready():
+    """Determine if the leader node has set shared-db client data
+
+    @returns boolean
+    """
+    # Bail if this unit is paused
+    if is_unit_paused_set():
+        return False
+    if not cluster_ready():
+        return False
+    for rid in relation_ids('shared-db'):
+        if leader_get(attribute='{}_password'.format(rid)):
+            return True
+    return False
+
+
+def leader_node_is_ready():
+    """Determine if the leader node is ready to handle client relationship
+    hooks.
+
+    IFF percona is not paused, is installed, this is the leader node and the
+    cluster is complete.
+
+    @returns boolean
+    """
+    # Paused check must run before other checks
+    # Bail if this unit is paused
+    if is_unit_paused_set():
+        return False
+    return (is_leader() and cluster_ready())

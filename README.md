@@ -93,6 +93,25 @@ requirements and resources available.
 HA/Clustering
 -------------
 
+When more than one unit of the charm is deployed with the hacluster charm
+the percona charm will bring up an Active/Active cluster. The process of
+clustering the units together takes some time. Due to the nature of
+asynchronous hook execution it is possible client relationship hooks may
+be executed before the cluster is complete. In some cases, this can lead
+to client charm errors.
+
+To guarantee client relation hooks will not be executed until clustering is
+completed use the min-cluster-size configuration setting:
+
+    juju deploy -n 3 percona-cluster
+    juju config percona-cluster min-cluster-size=3
+
+When min-cluster-size is not set the charm will still cluster, however,
+there are no guarantees client relation hooks will not execute before it is
+complete.
+
+Single unit deployments behave as expected.
+
 There are two mutually exclusive high availability options: using virtual
 IP(s) or DNS. In both cases, a relationship to hacluster is required which
 provides the corosync back end HA functionality.
