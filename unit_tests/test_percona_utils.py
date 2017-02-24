@@ -305,14 +305,17 @@ class UtilsTestsCTC(CharmTestCase):
         stat, _ = percona_utils.charm_check_func()
         assert stat == 'active'
 
+    @mock.patch.object(percona_utils, 'pxc_installed')
     @mock.patch.object(percona_utils, 'determine_packages')
     @mock.patch.object(percona_utils, 'application_version_set')
     @mock.patch.object(percona_utils, 'get_upstream_version')
     def test_assess_status(self, get_upstream_version,
                            application_version_set,
-                           determine_packages):
+                           determine_packages,
+                           pxc_installed):
         get_upstream_version.return_value = '5.6.17'
         determine_packages.return_value = ['percona-xtradb-cluster-server-5.6']
+        pxc_installed.return_value = True
         with mock.patch.object(percona_utils, 'assess_status_func') as asf:
             callee = mock.Mock()
             asf.return_value = callee

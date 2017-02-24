@@ -65,9 +65,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
     def _get_configs(self):
         """Configure all of the services."""
-        cfg_percona = {'sst-password': 'ubuntu',
-                       'root-password': 't00r',
-                       'min-cluster-size': self.units,
+        cfg_percona = {'min-cluster-size': self.units,
                        'vip': self.vip}
 
         cfg_ha = {'debug': True,
@@ -259,9 +257,9 @@ class BasicDeployment(OpenStackAmuletDeployment):
             u = unit
         else:
             u = self.master_unit
-
-        cmd = ("mysql -uroot -pt00r -e\"show status like '%s';\"| "
-               "grep %s" % (attr, attr))
+        root_password, _ = u.run('leader-get root-password')
+        cmd = ("mysql -uroot -p{} -e\"show status like '{}';\"| "
+               "grep {}".format(root_password, attr, attr))
         output, code = u.run(cmd)
         if code != 0:
             self.log.debug("command returned non-zero '%s'" % (code))

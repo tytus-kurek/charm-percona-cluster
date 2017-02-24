@@ -98,6 +98,9 @@ from percona_utils import (
     client_node_is_ready,
     leader_node_is_ready,
     DEFAULT_MYSQL_PORT,
+    sst_password,
+    root_password,
+    pxc_installed,
 )
 
 
@@ -112,6 +115,27 @@ RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
                       'OCF_CHECK_LEVEL="1"')
 
 
+def install_percona_xtradb_cluster():
+    '''Attempt PXC install based on seeding of passwords for users'''
+    if pxc_installed():
+        log('MySQL already installed, skipping')
+        return
+
+    _root_password = root_password()
+    _sst_password = sst_password()
+    if not _root_password or not _sst_password:
+        log('Passwords not seeded, unable to install MySQL at this'
+            ' point so deferring installation')
+        return
+    configure_mysql_root_password(_root_password)
+
+    apt_install(determine_packages(), fatal=True)
+
+    configure_sstuser(_sst_password)
+    if config('harden') and 'mysql' in config('harden'):
+        run_mysql_checks()
+
+
 @hooks.hook('install.real')
 @harden()
 def install():
@@ -121,13 +145,9 @@ def install():
         setup_percona_repo()
     elif config('source') is not None:
         add_source(config('source'), config('key'))
-
-    configure_mysql_root_password(config('root-password'))
     apt_update(fatal=True)
-    apt_install(determine_packages(), fatal=True)
-    configure_sstuser(config('sst-password'))
-    if config('harden') and 'mysql' in config('harden'):
-        run_mysql_checks()
+
+    install_percona_xtradb_cluster()
 
 
 def render_config(clustered=False, hosts=None):
@@ -144,7 +164,7 @@ def render_config(clustered=False, hosts=None):
         'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
         'sst_method': config('sst-method'),
-        'sst_password': config('sst-password'),
+        'sst_password': sst_password(),
         'innodb_file_per_table': config('innodb-file-per-table'),
         'table_open_cache': config('table-open-cache'),
         'lp1366997_workaround': config('lp1366997-workaround'),
@@ -601,7 +621,7 @@ def shared_db_changed(relation_id=None, unit=None):
 @hooks.hook('ha-relation-joined')
 def ha_relation_joined(relation_id=None):
     cluster_config = get_hacluster_config()
-    sstpsswd = config('sst-password')
+    sstpsswd = sst_password()
     resources = {'res_mysql_monitor': 'ocf:percona:mysql_monitor'}
     resource_params = {'res_mysql_monitor':
                        RES_MONITOR_PARAMS % {'sstpass': sstpsswd}}
@@ -673,6 +693,8 @@ def ha_relation_changed():
 
 @hooks.hook('leader-settings-changed')
 def leader_settings_changed():
+    '''Re-trigger install once leader has seeded passwords into install'''
+    install_percona_xtradb_cluster()
     # Notify any changes to data in leader storage
     update_shared_db_rels()
 

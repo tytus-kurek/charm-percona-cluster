@@ -29,13 +29,15 @@ TO_PATCH = ['log', 'config',
             'is_clustered',
             'get_ipv6_addr',
             'get_hacluster_config',
-            'update_dns_ha_resource_params']
+            'update_dns_ha_resource_params',
+            'sst_password']
 
 
 class TestHARelation(CharmTestCase):
     def setUp(self):
         CharmTestCase.setUp(self, hooks, TO_PATCH)
         self.network_get_primary_address.side_effect = NotImplementedError
+        self.sst_password.return_value = 'ubuntu'
 
     def test_resources(self):
         self.relation_ids.return_value = ['ha:1']
@@ -47,7 +49,6 @@ class TestHARelation(CharmTestCase):
         self.get_netmask_for_address.return_value = None
         self.get_iface_for_address.return_value = None
         self.test_config.set('vip', '10.0.3.3')
-        self.test_config.set('sst-password', password)
         self.get_hacluster_config.return_value = {
             'vip': '10.0.3.3',
             'ha-bindiface': 'eth0',
@@ -111,7 +112,7 @@ class TestHARelation(CharmTestCase):
                                              'cidr_netmask="20" '
                                              'nic="eth1"'),
                            'res_mysql_monitor':
-                           hooks.RES_MONITOR_PARAMS % {'sstpass': 'None'}}
+                           hooks.RES_MONITOR_PARAMS % {'sstpass': 'ubuntu'}}
 
         call_args, call_kwargs = self.relation_set.call_args
         self.assertEqual(resource_params, call_kwargs['resource_params'])
@@ -145,7 +146,7 @@ class TestHARelation(CharmTestCase):
                                              'cidr_netmask="16" '
                                              'nic="eth1"'),
                            'res_mysql_monitor':
-                           hooks.RES_MONITOR_PARAMS % {'sstpass': 'None'}}
+                           hooks.RES_MONITOR_PARAMS % {'sstpass': 'ubuntu'}}
 
         call_args, call_kwargs = self.relation_set.call_args
         self.assertEqual(resource_params, call_kwargs['resource_params'])
@@ -241,3 +242,55 @@ class TestConfigChanged(CharmTestCase):
         self.is_relation_made.return_value = False
         hooks.config_changed()
         self.open_port.assert_called_with(3306)
+
+
+class TestInstallPerconaXtraDB(CharmTestCase):
+
+    TO_PATCH = [
+        'log',
+        'pxc_installed',
+        'root_password',
+        'sst_password',
+        'configure_mysql_root_password',
+        'apt_install',
+        'determine_packages',
+        'configure_sstuser',
+        'config',
+        'run_mysql_checks',
+    ]
+
+    def setUp(self):
+        CharmTestCase.setUp(self, hooks, self.TO_PATCH)
+        self.config.side_effect = self.test_config.get
+        self.pxc_installed.return_value = False
+
+    def test_installed(self):
+        self.pxc_installed.return_value = True
+        hooks.install_percona_xtradb_cluster()
+        self.configure_mysql_root_password.assert_not_called()
+        self.apt_install.assert_not_called()
+
+    def test_passwords_not_initialized(self):
+        self.root_password.return_value = None
+        self.sst_password.return_value = None
+        hooks.install_percona_xtradb_cluster()
+        self.configure_mysql_root_password.assert_not_called()
+        self.configure_sstuser.assert_not_called()
+        self.apt_install.assert_not_called()
+
+        self.root_password.return_value = None
+        self.sst_password.return_value = 'testpassword'
+        hooks.install_percona_xtradb_cluster()
+        self.configure_sstuser.assert_not_called()
+        self.configure_mysql_root_password.assert_not_called()
+        self.apt_install.assert_not_called()
+
+    def test_passwords_initialized(self):
+        self.root_password.return_value = 'rootpassword'
+        self.sst_password.return_value = 'testpassword'
+        self.determine_packages.return_value = ['pxc-5.6']
+        hooks.install_percona_xtradb_cluster()
+        self.configure_mysql_root_password.assert_called_with('rootpassword')
+        self.configure_sstuser.assert_called_with('testpassword')
+        self.apt_install.assert_called_with(['pxc-5.6'], fatal=True)
+        self.run_mysql_checks.assert_not_called()

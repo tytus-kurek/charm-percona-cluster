@@ -104,14 +104,16 @@ options:
     type: string
     default:
     description: |
-      Root password for MySQL access; must be configured pre-deployment for
-      Active-Active clusters.
+      Root account password for new cluster nodes.  Overrides the automatic
+      generation of a password for the root user, but must be set prior to
+      deployment time to have any effect.
   sst-password:
     type: string
     default:
     description: |
-      Re-sync account password for new cluster nodes; must be configured
-      pre-deployment for Active-Active clusters.
+      SST account password for new cluster nodes.  Overrides the automatic
+      generation of a password for the sst user, but must be set prior to
+      deployment time to have any effect.
   sst-method:
     type: string
     default: xtrabackup-v2

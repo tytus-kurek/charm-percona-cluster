@@ -11,43 +11,29 @@ This charm deploys Percona XtraDB Cluster onto Ubuntu.
 Usage
 =====
 
-WARNING: Its critical that you follow the bootstrap process detailed in this
-document in order to end up with a running Active/Active Percona Cluster.
-
-Proxy Configuration
--------------------
-
-If you are deploying this charm on MAAS or in an environment without direct
-access to the internet, you will need to allow access to repo.percona.com
-as the charm installs packages direct from the Percona respositories. If you
-are using squid-deb-proxy, follow the steps below:
-
-    echo "repo.percona.com" | sudo tee /etc/squid-deb-proxy/mirror-dstdomain.acl.d/40-percona
-    sudo service squid-deb-proxy restart
-
 Deployment
 ----------
 
-The first service unit deployed acts as the seed node for the rest of the
-cluster; in order for the cluster to function correctly, the same MySQL passwords
-must be used across all nodes:
+To deploy this charm:
 
-    cat > percona.yaml << EOF
-    percona-cluster:
-        root-password: my-root-password
-        sst-password: my-sst-password
-    EOF
+    juju deploy percona-cluster
 
-Once you have created this file, you can deploy the first seed unit:
+Passwords required for the correct operation of the deployment are automatically
+generated and stored by the lead unit (typically the first unit).
 
-    juju deploy --config percona.yaml percona-cluster
+To expand the deployment:
 
-Once this node is full operational, you can add extra units one at a time to the
-deployment:
+    juju add-unit -n 2 percona-cluster
 
-    juju add-unit percona-cluster
+See notes in the 'HA/Clustering' section on safely deploying a PXC cluster
+in a single action.
 
-A minimum cluster size of three units is recommended.
+The root password for mysql can be retrieved using the following command:
+
+    juju run --unit percona-cluster/0 leader-get root-password
+
+This is only usable from within one of the units within the deployment
+(access to root is restricted to localhost only).
 
 Memory Configuration
 -------------------
@@ -86,7 +72,7 @@ the host due to performance schema being turned on. Even with the default now
 turned off this value should be carefully considered against the production
 requirements and resources available.
 
-[1] http://dev.mysql.com/doc/relnotes/mysql/5.6/en/news-5-6-6.html#mysqld-5-6-6-performance-schema 
+[1] http://dev.mysql.com/doc/relnotes/mysql/5.6/en/news-5-6-6.html#mysqld-5-6-6-performance-schema
 [2] http://www.mysqlcalculator.com/
 
 

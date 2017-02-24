@@ -6,12 +6,14 @@ import tempfile
 import os
 import shutil
 import uuid
+from functools import partial
 
 from charmhelpers.core.decorators import retry_on_exception
 from charmhelpers.core.host import (
     lsb_release,
     mkdir,
     service,
+    pwgen,
 )
 from charmhelpers.core.hookenv import (
     charm_dir,
@@ -542,7 +544,8 @@ def assess_status(configs):
     @returns None - this function is executed for its side-effect
     """
     assess_status_func(configs)()
-    application_version_set(get_upstream_version(determine_packages()[0]))
+    if pxc_installed():
+        application_version_set(get_upstream_version(determine_packages()[0]))
 
 
 def assess_status_func(configs):
@@ -720,3 +723,36 @@ def leader_node_is_ready():
     if is_unit_paused_set():
         return False
     return (is_leader() and cluster_ready())
+
+
+def _get_password(key):
+    '''Retrieve named password
+
+    This function will ensure that a consistent named password
+    is used across all units in the pxc cluster; the lead unit
+    will generate or use the root-password configuration option
+    to seed this value into the deployment.
+
+    Once set, it cannot be changed.
+
+    @requires: str: named password or None if unable to retrieve
+                    at this point in time
+    '''
+    _password = leader_get(key)
+    if not _password and is_leader():
+        _password = config(key) or pwgen()
+        leader_set({key: _password})
+    return _password
+
+
+root_password = partial(_get_password, 'root-password')
+
+sst_password = partial(_get_password, 'sst-password')
+
+
+def pxc_installed():
+    '''Determine whether percona-xtradb-cluster is installed
+
+    @returns: boolean: indicating installation
+    '''
+    return os.path.exists('/usr/sbin/mysqld')
