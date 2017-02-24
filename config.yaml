@@ -37,9 +37,9 @@ options:
     default:
     description: |
       By default this value will be set according to 50% of system total
-      memory but also can be set to any specific value for the system.
-      Supported suffixes include K/M/G/T. If suffixed with %, one will get that
-      percentage of system total memory allocated.
+      memory or 512MB (whichever is lowest) but also can be set to any specific
+      value for the system.  Supported suffixes include K/M/G/T. If suffixed
+      with %, one will get that percentage of system total memory allocated.
   max-connections:
     type: int
     default: 600

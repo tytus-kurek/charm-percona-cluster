@@ -42,8 +42,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
            compatible with the local charm (e.g. stable or next).
            """
         this_service = {'name': 'percona-cluster',
-                        'units': self.units,
-                        'constraints': {'mem': '3072M'}}
+                        'units': self.units}
         other_services = []
         if self.units > 1:
             other_services.append({'name': 'hacluster'})
@@ -61,7 +60,6 @@ class BasicDeployment(OpenStackAmuletDeployment):
         """Configure all of the services."""
         cfg_percona = {'sst-password': 'ubuntu',
                        'root-password': 't00r',
-                       'dataset-size': '512M',
                        'vip': self.vip}
 
         cfg_ha = {'debug': True,
