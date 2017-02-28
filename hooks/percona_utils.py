@@ -386,7 +386,12 @@ def bootstrap_pxc():
     bootstrapped = service('bootstrap-pxc', 'mysql')
     if not bootstrapped:
         try:
-            cmd = ['service', 'mysql', 'bootstrap-pxc']
+            # NOTE(jamespage): execute under systemd-run to ensure
+            #                  that the bootstrap-pxc mysqld does
+            #                  not end up in the juju unit daemons
+            #                  cgroup scope.
+            cmd = ['systemd-run', '--service-type=forking',
+                   'service', 'mysql', 'bootstrap-pxc']
             subprocess.check_call(cmd)
         except subprocess.CalledProcessError as e:
             msg = 'Bootstrap PXC failed'
