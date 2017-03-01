@@ -390,7 +390,7 @@ def bootstrap_pxc():
             #                  that the bootstrap-pxc mysqld does
             #                  not end up in the juju unit daemons
             #                  cgroup scope.
-            cmd = ['systemd-run', '-t', '--service-type=forking',
+            cmd = ['systemd-run', '--service-type=forking',
                    'service', 'mysql', 'bootstrap-pxc']
             subprocess.check_call(cmd)
         except subprocess.CalledProcessError as e:
