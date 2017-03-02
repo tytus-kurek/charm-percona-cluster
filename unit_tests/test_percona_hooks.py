@@ -206,3 +206,38 @@ class TestNRPERelation(CharmTestCase):
         hooks.update_nrpe_config()
         self.nrpe.add_init_service_checks.assert_called_once_with(
             mock.ANY, ["mysql"], mock.ANY)
+
+
+class TestConfigChanged(CharmTestCase):
+
+    TO_PATCH = [
+        'log',
+        'open_port',
+        'config',
+        'is_unit_paused_set',
+        'get_cluster_hosts',
+        'is_bootstrapped',
+        'is_leader',
+        'render_config_restart_on_changed',
+        'update_shared_db_rels',
+        'install_mysql_ocf',
+        'relation_ids',
+        'is_relation_made',
+        'ha_relation_joined',
+        'update_nrpe_config',
+        'assert_charm_supports_ipv6',
+    ]
+
+    def setUp(self):
+        CharmTestCase.setUp(self, hooks, self.TO_PATCH)
+        self.config.side_effect = self.test_config.get
+
+    def test_config_changed_open_port(self):
+        '''Ensure open_port is called with MySQL default port'''
+        self.is_unit_paused_set.return_value = False
+        self.is_bootstrapped.return_value = False
+        self.is_leader.return_value = False
+        self.relation_ids.return_value = []
+        self.is_relation_made.return_value = False
+        hooks.config_changed()
+        self.open_port.assert_called_with(3306)

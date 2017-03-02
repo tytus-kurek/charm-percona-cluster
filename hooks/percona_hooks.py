@@ -26,6 +26,7 @@ from charmhelpers.core.hookenv import (
     network_get_primary_address,
     charm_name,
     leader_get,
+    open_port,
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -96,6 +97,7 @@ from percona_utils import (
     get_cluster_host_ip,
     client_node_is_ready,
     leader_node_is_ready,
+    DEFAULT_MYSQL_PORT,
 )
 
 
@@ -295,6 +297,8 @@ def config_changed():
 
     if is_relation_made('nrpe-external-master'):
         update_nrpe_config()
+
+    open_port(DEFAULT_MYSQL_PORT)
 
 
 @hooks.hook('cluster-relation-joined')

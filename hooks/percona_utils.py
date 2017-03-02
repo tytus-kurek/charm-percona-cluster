@@ -65,6 +65,7 @@ REPO = """deb http://repo.percona.com/apt {release} main
 deb-src http://repo.percona.com/apt {release} main"""
 SEEDED_MARKER = "{data_dir}/seeded"
 HOSTS_FILE = '/etc/hosts'
+DEFAULT_MYSQL_PORT = 3306
 
 # NOTE(ajkavanagh) - this is 'required' for the pause/resume code for
 # maintenance mode, but is currently not populated as the
