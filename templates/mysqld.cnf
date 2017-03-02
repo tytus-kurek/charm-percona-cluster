@@ -85,7 +85,21 @@ innodb_file_per_table = 1
 innodb_file_per_table = 0
 {% endif %}
 
+# This option is driven by via the tuning-level configuration option
+# safest = 1 (default)
+# fast   = 2
+# unsafe = 0
+innodb_flush_log_at_trx_commit = {{ innodb_flush_log_at_trx_commit }}
+
 innodb_buffer_pool_size = {{ innodb_buffer_pool_size }}
+
+{% if innodb_change_buffering -%}
+innodb_change_buffering = {{ innodb_change_buffering }}
+{% endif %}
+
+{% if innodb_io_capacity -%}
+innodb_io_capacity = {{ innodb_io_capacity }}
+{% endif %}
 
 #
 # * Galera

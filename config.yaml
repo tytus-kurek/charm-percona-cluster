@@ -40,6 +40,45 @@ options:
       memory or 512MB (whichever is lowest) but also can be set to any specific
       value for the system.  Supported suffixes include K/M/G/T. If suffixed
       with %, one will get that percentage of system total memory allocated.
+  innodb-change-buffering:
+    type: string
+    default:
+    description: |
+      Configure whether InnoDB performs change buffering, an optimization
+      that delays write operations to secondary indexes so that the I/O
+      operations can be performed sequentially.
+
+      Permitted values include
+
+        none        Do not buffer any operations.
+        inserts     Buffer insert operations.
+        deletes     Buffer delete marking operations; strictly speaking,
+                    the writes that mark index records for later deletion
+                    during a purge operation.
+        changes     Buffer inserts and delete-marking operations.
+        purges      Buffer the physical deletion operations that happen
+                    in the background.
+        all         The default. Buffer inserts, delete-marking
+                    operations, and purges.
+
+      For more details https://dev.mysql.com/doc/refman/5.6/en/innodb-parameters.html#sysvar_innodb_change_bufferring
+  innodb-io-capacity:
+    type: int
+    default:
+    description: |
+      Configure the InnoDB IO capacity which sets an upper limit on I/O
+      activity performed by InnoDB background tasks, such as flushing pages
+      from the buffer pool and merging data from the change buffer.
+
+      This value typically defaults to 200 but can be increased on systems
+      with fast bus-attached SSD based storage to help the server handle the
+      background maintenance work associated with a high rate of row changes.
+
+      Alternatively it can be decreased to a minimum of 100 on systems with
+      low speed 5400 or 7200 rpm spindles, to reduce the proportion of IO
+      operations being used for background maintenance work.
+
+      For more details https://dev.mysql.com/doc/refman/5.6/en/innodb-parameters.html#sysvar_innodb_io_capacity
   max-connections:
     type: int
     default: 600
@@ -228,3 +267,11 @@ options:
       implication of this is one can set configuration values that could lead
       to memory exhaustion during run time as memory is not allocated at
       startup time.
+  tuning-level:
+    default: safest
+    type: string
+    description: |
+      Valid values are 'safest', 'fast', and 'unsafe'. If set to 'safest', all
+      settings are tuned to have maximum safety at the cost of performance.
+      'fast' will turn off most controls, but may lose data on crashes. 'unsafe'
+      will turn off all protections but this may be OK in clustered deployments.
