@@ -143,11 +143,14 @@ If 'dns-ha' is set and os-access-hostname is not set
 Network Space support
 ---------------------
 
-This charm supports the use of Juju Network Spaces, allowing the charm to be bound to network space configurations managed directly by Juju.  This is only supported with Juju 2.0 and above.
+This charm supports the use of Juju Network Spaces, allowing the charm to be bound
+to network space configurations managed directly by Juju.  This is only supported
+with Juju 2.0 and above.
 
-You can ensure that database connections are bound to a specific network space by binding the appropriate interfaces:
+You can ensure that database connections and cluster peer communication are bound to
+specific network spaces by binding the appropriate interfaces:
 
-    juju deploy percona-cluster --bind "shared-db=internal-space"
+    juju deploy percona-cluster --bind "shared-db=internal-space,cluster=internal-space"
 
 alternatively these can also be provided as part of a juju native bundle configuration:
 
@@ -156,10 +159,16 @@ alternatively these can also be provided as part of a juju native bundle configu
       num_units: 1
       bindings:
         shared-db: internal-space
+        cluster: internal-space
+
+The 'cluster' endpoint binding is used to determine which network space units within the
+percona-cluster deployment should use for communication with each other; the 'shared-db'
+endpoint binding is used to determine which network space should be used for access to
+MySQL databases services from other charms.
 
 **NOTE:** Spaces must be configured in the underlying provider prior to attempting to use them.
 
-**NOTE:** Existing deployments using the access-network configuration option will continue to function; this option is preferred over any network space binding provided if set.
+**NOTE:** Existing deployments using the access-network configuration option will continue to function; this option is preferred over any network space binding provided for the 'shared-db' relation if set.
 
 Limitiations
 ============
