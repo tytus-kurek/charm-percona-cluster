@@ -287,13 +287,23 @@ class UtilsTestsCTC(CharmTestCase):
         stat, _ = percona_utils.charm_check_func()
         assert stat == 'active'
 
-    def test_bootstrapped_not_in_sync(self):
+    @mock.patch('time.sleep', return_value=None)
+    def test_bootstrapped_not_in_sync(self, mock_time):
         self.config.return_value = 3
         self.is_sufficient_peers.return_value = True
         self.is_bootstrapped.return_value = True
         self.cluster_in_sync.return_value = False
         stat, _ = percona_utils.charm_check_func()
         assert stat == 'blocked'
+
+    @mock.patch('time.sleep', return_value=None)
+    def test_bootstrapped_not_in_sync_to_synced(self, mock_time):
+        self.config.return_value = 3
+        self.is_sufficient_peers.return_value = True
+        self.is_bootstrapped.return_value = True
+        self.cluster_in_sync.side_effect = [False, False, True]
+        stat, _ = percona_utils.charm_check_func()
+        assert stat == 'active'
 
     @mock.patch.object(percona_utils, 'determine_packages')
     @mock.patch.object(percona_utils, 'application_version_set')

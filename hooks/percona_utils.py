@@ -7,6 +7,7 @@ import os
 import shutil
 import uuid
 
+from charmhelpers.core.decorators import retry_on_exception
 from charmhelpers.core.host import (
     lsb_release,
     mkdir,
@@ -441,11 +442,29 @@ def cluster_in_sync():
     return False
 
 
+class DesyncedException(Exception):
+    '''Raised if PXC unit is not in sync with its peers'''
+    pass
+
+
 def charm_check_func():
     """Custom function to assess the status of the current unit
 
     @returns (status, message) - tuple of strings if an issue
     """
+
+    @retry_on_exception(num_retries=10,
+                        base_delay=2,
+                        exc_type=DesyncedException)
+    def _cluster_in_sync():
+        '''Helper func to wait for a while for resync to occur
+
+        @raise DesynedException: raised if local unit is not in sync
+                                 with its peers
+        '''
+        if not cluster_in_sync():
+            raise DesyncedException()
+
     min_size = config('min-cluster-size')
     # Ensure that number of peers > cluster size configuration
     if not is_sufficient_peers():
@@ -456,10 +475,12 @@ def charm_check_func():
         # and has the required peers
         if not is_bootstrapped():
             return ('waiting', 'Unit waiting for cluster bootstrap')
-        elif is_bootstrapped() and cluster_in_sync():
-            return ('active', 'Unit is ready and clustered')
-        else:
-            return ('blocked', 'Unit is not in sync')
+        elif is_bootstrapped():
+            try:
+                _cluster_in_sync()
+                return ('active', 'Unit is ready and clustered')
+            except DesyncedException:
+                return ('blocked', 'Unit is not in sync')
     else:
         return ('active', 'Unit is ready')
 
