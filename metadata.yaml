@@ -9,6 +9,7 @@ tags:
   - databases
 series:
   - xenial
+  - zesty
   - trusty
   - yakkety
 extra-bindings:
