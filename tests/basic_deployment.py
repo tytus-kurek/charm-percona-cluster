@@ -1,3 +1,5 @@
+# basic deployment test class for percona-xtradb-cluster
+
 import amulet
 import re
 import os
@@ -8,9 +10,13 @@ import yaml
 from charmhelpers.contrib.openstack.amulet.deployment import (
     OpenStackAmuletDeployment
 )
+from charmhelpers.contrib.amulet.utils import AmuletUtils
 
 
 class BasicDeployment(OpenStackAmuletDeployment):
+
+    utils = AmuletUtils()
+
     def __init__(self, vip=None, units=1, series="trusty", openstack=None,
                  source=None, stable=False):
         super(BasicDeployment, self).__init__(series, openstack, source,
@@ -33,6 +39,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
                                     ("Please set the vip in local.yaml or "
                                      "env var AMULET_OS_VIP to run this test "
                                      "suite"))
+        self.log = self.utils.get_logger()
 
     def _add_services(self):
         """Add services
@@ -60,20 +67,21 @@ class BasicDeployment(OpenStackAmuletDeployment):
         """Configure all of the services."""
         cfg_percona = {'sst-password': 'ubuntu',
                        'root-password': 't00r',
+                       'min-cluster-size': self.units,
                        'vip': self.vip}
 
         cfg_ha = {'debug': True,
-                  'corosync_mcastaddr': '226.94.1.4',
                   'corosync_key': ('xZP7GDWV0e8Qs0GxWThXirNNYlScgi3sRTdZk/IXKD'
                                    'qkNFcwdCWfRQnqrHU/6mb6sz6OIoZzX2MtfMQIDcXu'
                                    'PqQyvKuv7YbRyGHmQwAWDUA4ed759VWAO39kHkfWp9'
                                    'y5RRk/wcHakTcWYMwm70upDGJEP00YT3xem3NQy27A'
                                    'C1w=')}
 
-        configs = {'percona-cluster': cfg_percona}
+        configs = {}
         if self.units > 1:
             cfg_ha['cluster_count'] = str(self.units)
             configs['hacluster'] = cfg_ha
+        configs['percona-cluster'] = cfg_percona
 
         return configs
 
@@ -86,7 +94,23 @@ class BasicDeployment(OpenStackAmuletDeployment):
         self._configure_services()
         self._deploy()
         self.d.sentry.wait()
+        self.test_deployment()
 
+    def test_deployment(self):
+        '''Top level test function executor'''
+        self.test_pacemaker()
+        self.test_pxc_running()
+        self.test_bootstrapped_and_clustered()
+        self.test_pause_resume()
+        self.test_kill_master()
+
+    def test_pacemaker(self):
+        '''
+        Ensure that pacemaker and corosync are correctly configured in
+        clustered deployments.
+
+        side effect: self.master_unit should be set after execution
+        '''
         if self.units > 1:
             i = 0
             while i < 30 and not self.master_unit:
@@ -108,8 +132,86 @@ class BasicDeployment(OpenStackAmuletDeployment):
         else:
             self.master_unit = self.find_master(ha=False)
 
+    def test_pxc_running(self):
+        '''
+        Ensure PXC is running on all units
+        '''
         for unit in self.d.sentry['percona-cluster']:
             assert self.is_mysqld_running(unit), 'mysql not running: %s' % unit
+
+    def test_bootstrapped_and_clustered(self):
+        '''
+        Ensure PXC is bootstrapped and that peer units are clustered
+        '''
+        self.log.info('Ensuring PXC is bootstrapped')
+        msg = "Percona cluster failed to bootstrap"
+        assert self.is_pxc_bootstrapped(), msg
+
+        self.log.info('Checking PXC cluster size == {}'.format(self.units))
+        got = int(self.get_cluster_size())
+        msg = ("Percona cluster unexpected size"
+               " (wanted=%s, got=%s)" % (self.units, got))
+        assert got == self.units, msg
+
+    def test_pause_resume(self):
+        '''
+        Ensure pasue/resume actions stop/start mysqld on units
+        '''
+        self.log.info('Testing pause/resume actions')
+        self.log.info('Pausing service on first PXC unit')
+        unit = self.d.sentry['percona-cluster'][0]
+        assert self.is_mysqld_running(unit), 'mysql not running'
+        assert self.utils.status_get(unit)[0] == "active"
+
+        action_id = self.utils.run_action(unit, "pause")
+        assert self.utils.wait_on_action(action_id), "Pause action failed."
+
+        # Note that is_mysqld_running will print an error message when
+        # mysqld is not running.  This is by design but it looks odd
+        # in the output.
+        assert not self.is_mysqld_running(unit=unit), \
+            "mysqld is still running!"
+
+        self.log.info('Resuming service on first PXC unit')
+        assert self.utils.status_get(unit)[0] == "maintenance"
+        action_id = self.utils.run_action(unit, "resume")
+        assert self.utils.wait_on_action(action_id), "Resume action failed"
+        assert self.utils.status_get(unit)[0] == "active"
+        assert self.is_mysqld_running(unit=unit), \
+            "mysqld not running after resume."
+
+    def test_kill_master(self):
+        '''
+        Ensure that killing the mysqld on the master unit results
+        in a VIP failover
+        '''
+        self.log.info('Testing failover of master unit on mysqld failure')
+        # we are going to kill the master
+        old_master = self.master_unit
+        self.log.info(
+            'kill -9 mysqld on {}'.format(self.master_unit.info['unit_name'])
+        )
+        self.master_unit.run('sudo killall -9 mysqld')
+
+        self.log.info('looking for the new master')
+        i = 0
+        changed = False
+        while i < 10 and not changed:
+            i += 1
+            time.sleep(5)  # give some time to pacemaker to react
+            new_master = self.find_master()
+
+            if (new_master and new_master.info['unit_name'] !=
+                    old_master.info['unit_name']):
+                self.log.info(
+                    'New master unit detected'
+                    ' on {}'.format(new_master.info['unit_name'])
+                )
+                changed = True
+
+        assert changed, "The master didn't change"
+
+        assert self.is_port_open(address=self.vip), 'cannot connect to vip'
 
     def find_master(self, ha=True):
         for unit in self.d.sentry['percona-cluster']:
@@ -118,11 +220,13 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
             # is the vip running here?
             output, code = unit.run('sudo ip a | grep "inet %s/"' % self.vip)
-            print('---')
-            print(unit)
-            print(output)
+            self.log.info("Checking {}".format(unit.info['unit_name']))
+            self.log.debug(output)
             if code == 0:
-                print('vip(%s) running in %s' % (self.vip, unit))
+                self.log.info('vip ({}) running in {}'.format(
+                    self.vip,
+                    unit.info['unit_name'])
+                )
                 return unit
 
     def get_pcmkr_resources(self, unit=None):
@@ -145,7 +249,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
         _, code = u.run('pidof mysqld')
         if code != 0:
-            print("ERROR: command returned non-zero '%s'" % (code))
+            self.log.debug("command returned non-zero '%s'" % (code))
             return False
 
         return True
@@ -160,11 +264,11 @@ class BasicDeployment(OpenStackAmuletDeployment):
                "grep %s" % (attr, attr))
         output, code = u.run(cmd)
         if code != 0:
-            print("ERROR: command returned non-zero '%s'" % (code))
+            self.log.debug("command returned non-zero '%s'" % (code))
             return ""
 
         value = re.search(r"^.+?\s+(.+)", output).group(1)
-        print("%s = %s" % (attr, value))
+        self.log.info("%s = %s" % (attr, value))
         return value
 
     def is_pxc_bootstrapped(self, unit=None):
@@ -187,8 +291,9 @@ class BasicDeployment(OpenStackAmuletDeployment):
             return True
         except socket.error as e:
             if e.errno == 113:
-                print("ERROR: could not connect to %s:%s" % (addr, port))
+                self.log.error("could not connect to %s:%s" % (addr, port))
             if e.errno == 111:
-                print("ERROR: connection refused connecting to %s:%s" % (addr,
-                                                                         port))
+                self.log.error("connection refused connecting"
+                               " to %s:%s" % (addr,
+                                              port))
             return False

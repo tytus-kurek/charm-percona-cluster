@@ -4,5 +4,5 @@ import basic_deployment
 
 
 if __name__ == "__main__":
-    t = basic_deployment.BasicDeployment(units=3, series='yakkety')
+    t = basic_deployment.BasicDeployment(units=3, series='trusty')
     t.run()
