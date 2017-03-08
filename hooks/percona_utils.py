@@ -46,6 +46,7 @@ from charmhelpers.fetch import (
 from charmhelpers.contrib.network.ip import (
     get_address_in_network,
     get_ipv6_addr,
+    is_ip,
 )
 from charmhelpers.contrib.database.mysql import (
     MySQLHelper,
@@ -110,11 +111,11 @@ def setup_percona_repo():
     subprocess.check_call(['apt-key', 'add', KEY])
 
 
-def resolve_hostname_to_ip(hostname):
+def resolve_hostname_to_ip(hostname, ipv6=False):
     """Resolve hostname to IP
 
     @param hostname: hostname to be resolved
-    @returns IP address
+    @returns IP address or None if resolution was not possible via DNS
     """
     try:
         import dns.resolver
@@ -123,14 +124,16 @@ def resolve_hostname_to_ip(hostname):
                     fatal=True)
         import dns.resolver
 
-    try:
-        # Test to see if already an IPv4 address
-        socket.inet_aton(hostname)
+    if is_ip(hostname):
         return hostname
-    except socket.error:
+    else:
+        if ipv6:
+            query_type = 'AAAA'
+        else:
+            query_type = 'A'
         # This may throw an NXDOMAIN exception; in which case
         # things are badly broken so just let it kill the hook
-        answers = dns.resolver.query(hostname, 'A')
+        answers = dns.resolver.query(hostname, query_type)
         if answers:
             return answers[0].address
 

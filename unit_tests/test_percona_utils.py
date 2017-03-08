@@ -460,3 +460,55 @@ class UtilsTestsCTC(CharmTestCase):
         self.is_leader.return_value = True
         mock_cluster_ready.return_value = True
         self.assertTrue(percona_utils.leader_node_is_ready())
+
+
+class TestResolveHostnameToIP(CharmTestCase):
+
+    TO_PATCH = []
+
+    def setUp(self):
+        CharmTestCase.setUp(self, percona_utils,
+                            self.TO_PATCH)
+
+    def test_resolve_hostname_to_ip_ips(self):
+        ipv6_address = '2a01:348:2f4:0:dba7:dc58:659b:941f'
+        ipv4_address = '10.10.10.2'
+        self.assertEqual(percona_utils.resolve_hostname_to_ip(ipv6_address),
+                         ipv6_address)
+        self.assertEqual(percona_utils.resolve_hostname_to_ip(ipv4_address),
+                         ipv4_address)
+
+    @mock.patch('dns.resolver.query')
+    def test_resolve_hostname_to_ip_hostname_a(self,
+                                               dns_query):
+        mock_answer = mock.MagicMock()
+        mock_answer.address = '10.10.10.20'
+        dns_query.return_value = [mock_answer]
+        self.assertEqual(percona_utils.resolve_hostname_to_ip('myhostname'),
+                         '10.10.10.20')
+        dns_query.assert_has_calls([
+            mock.call('myhostname', 'A'),
+        ])
+
+    @mock.patch('dns.resolver.query')
+    def test_resolve_hostname_to_ip_hostname_aaaa(self,
+                                                  dns_query):
+        mock_answer = mock.MagicMock()
+        mock_answer.address = '2a01:348:2f4:0:dba7:dc58:659b:941f'
+        dns_query.return_value = [mock_answer]
+        self.assertEqual(percona_utils.resolve_hostname_to_ip('myhostname',
+                                                              ipv6=True),
+                         '2a01:348:2f4:0:dba7:dc58:659b:941f')
+        dns_query.assert_has_calls([
+            mock.call('myhostname', 'AAAA'),
+        ])
+
+    @mock.patch('dns.resolver.query')
+    def test_resolve_hostname_to_ip_hostname_noanswer(self,
+                                                      dns_query):
+        dns_query.return_value = []
+        self.assertEqual(percona_utils.resolve_hostname_to_ip('myhostname'),
+                         None)
+        dns_query.assert_has_calls([
+            mock.call('myhostname', 'A'),
+        ])
