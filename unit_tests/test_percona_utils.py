@@ -512,3 +512,74 @@ class TestResolveHostnameToIP(CharmTestCase):
         dns_query.assert_has_calls([
             mock.call('myhostname', 'A'),
         ])
+
+
+class TestUpdateBootstrapUUID(CharmTestCase):
+    TO_PATCH = [
+        'log',
+        'leader_get',
+        'get_wsrep_value',
+        'relation_ids',
+        'relation_set',
+        'is_leader',
+        'leader_set',
+    ]
+
+    def setUp(self):
+        CharmTestCase.setUp(self, percona_utils, self.TO_PATCH)
+        self.log.side_effect = self.juju_log
+
+    def juju_log(self, msg, level=None):
+        print('juju-log %s: %s' % (level, msg))
+
+    def test_no_bootstrap_uuid(self):
+        self.leader_get.return_value = None
+        self.assertRaises(percona_utils.LeaderNoBootstrapUUIDError,
+                          percona_utils.update_bootstrap_uuid)
+
+    def test_bootstrap_uuid_already_set(self):
+        self.leader_get.return_value = '1234-abcd'
+
+        def fake_wsrep(k):
+            d = {'wsrep_ready': 'ON',
+                 'wsrep_cluster_state_uuid': '1234-abcd'}
+            return d[k]
+
+        self.get_wsrep_value.side_effect = fake_wsrep
+        self.relation_ids.return_value = ['cluster:2']
+        self.is_leader.return_value = False
+        percona_utils.update_bootstrap_uuid()
+        self.relation_set.assert_called_with(relation_id='cluster:2',
+                                             **{'bootstrap-uuid': '1234-abcd'})
+        self.leader_set.assert_not_called()
+
+        self.is_leader.return_value = True
+        percona_utils.update_bootstrap_uuid()
+        self.relation_set.assert_called_with(relation_id='cluster:2',
+                                             **{'bootstrap-uuid': '1234-abcd'})
+        self.leader_set.assert_called_with(**{'bootstrap-uuid': '1234-abcd'})
+
+    @mock.patch.object(percona_utils, 'notify_bootstrapped')
+    def test_bootstrap_uuid_could_not_be_retrieved(self, mock_notify):
+        self.leader_get.return_value = '1234-abcd'
+
+        def fake_wsrep(k):
+            d = {'wsrep_ready': 'ON',
+                 'wsrep_cluster_state_uuid': ''}
+            return d[k]
+
+        self.get_wsrep_value.side_effect = fake_wsrep
+        self.assertFalse(percona_utils.update_bootstrap_uuid())
+        mock_notify.assert_not_called()
+
+    def test_bootstrap_uuid_diffent_uuids(self):
+        self.leader_get.return_value = '1234-abcd'
+
+        def fake_wsrep(k):
+            d = {'wsrep_ready': 'ON',
+                 'wsrep_cluster_state_uuid': '5678-dead-beef'}
+            return d[k]
+
+        self.get_wsrep_value.side_effect = fake_wsrep
+        self.assertRaises(percona_utils.InconsistentUUIDError,
+                          percona_utils.update_bootstrap_uuid)

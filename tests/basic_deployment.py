@@ -99,6 +99,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
         self.test_pacemaker()
         self.test_pxc_running()
         self.test_bootstrapped_and_clustered()
+        self.test_bootstrap_uuid_set_in_the_relation()
         self.test_pause_resume()
         self.test_kill_master()
 
@@ -150,6 +151,25 @@ class BasicDeployment(OpenStackAmuletDeployment):
         msg = ("Percona cluster unexpected size"
                " (wanted=%s, got=%s)" % (self.units, got))
         assert got == self.units, msg
+
+    def test_bootstrap_uuid_set_in_the_relation(self):
+        """Verify that the bootstrap-uuid attribute was set by the leader and
+        all the peers where notified.
+        """
+        (leader_uuid, code) = self.master_unit.run("leader-get bootstrap-uuid")
+        assert leader_uuid
+
+        cmd_rel_get = ("relation-get -r `relation-ids cluster` "
+                       "bootstrap-uuid %s")
+        units = self.d.sentry['percona-cluster']
+        for unit in units:
+            for peer in units:
+                cmd = cmd_rel_get % peer.info['unit_name']
+                self.log.debug(cmd)
+                (output, code) = unit.run(cmd)
+                assert code == 0
+                assert output == leader_uuid, "%s != %s" % (output,
+                                                            leader_uuid)
 
     def test_pause_resume(self):
         '''
