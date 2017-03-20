@@ -26,6 +26,7 @@ from charmhelpers.core.hookenv import (
     network_get_primary_address,
     charm_name,
     leader_get,
+    status_set,
 )
 from charmhelpers.core.host import (
     service_restart,
@@ -96,6 +97,8 @@ from percona_utils import (
     get_cluster_host_ip,
     client_node_is_ready,
     leader_node_is_ready,
+    update_bootstrap_uuid,
+    LeaderNoBootstrapUUIDError,
 )
 
 
@@ -239,15 +242,28 @@ def update_shared_db_rels():
 @harden()
 def upgrade():
 
-    if leader_node_is_ready():
-        # If this is the leader but we have not yet broadcast the cluster uuid
-        # then do so now.
+    if is_leader():
+        if is_unit_paused_set():
+            log('Unit is paused, skiping upgrade', level=INFO)
+            return
+
+        # broadcast the bootstrap-uuid
         wsrep_ready = get_wsrep_value('wsrep_ready') or ""
         if wsrep_ready.lower() in ['on', 'ready']:
             cluster_state_uuid = get_wsrep_value('wsrep_cluster_state_uuid')
             if cluster_state_uuid:
                 mark_seeded()
                 notify_bootstrapped(cluster_uuid=cluster_state_uuid)
+    else:
+        # Ensure all the peers have the bootstrap-uuid attribute set
+        # as this is all happening during the upgrade-charm hook is reasonable
+        # to expect the cluster is running.
+
+        # Wait until the leader has set the
+        try:
+            update_bootstrap_uuid()
+        except LeaderNoBootstrapUUIDError:
+            status_set('waiting', "Waiting for bootstrap-uuid set by leader")
 
     config_changed()
 
@@ -671,6 +687,14 @@ def ha_relation_changed():
 def leader_settings_changed():
     # Notify any changes to data in leader storage
     update_shared_db_rels()
+    log('leader-settings-changed', level='DEBUG')
+    try:
+        update_bootstrap_uuid()
+    except LeaderNoBootstrapUUIDError:
+        # until the bootstrap-uuid attribute is not replicated cluster_ready()
+        # will evaluate to False, so it is necessary to feed back this info
+        # to the user.
+        status_set('waiting', "Waiting for bootstrap-uuid set by leader")
 
 
 @hooks.hook('nrpe-external-master-relation-joined',

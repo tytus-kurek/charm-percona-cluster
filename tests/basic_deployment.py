@@ -113,6 +113,27 @@ class BasicDeployment(OpenStackAmuletDeployment):
         for unit in self.d.sentry['percona-cluster']:
             assert self.is_mysqld_running(unit), 'mysql not running: %s' % unit
 
+        self.test_bootstrap_uuid_set_in_the_relation()
+
+    def test_bootstrap_uuid_set_in_the_relation(self):
+        """Verify that the bootstrap-uuid attribute was set by the leader and
+        all the peers where notified.
+        """
+        (leader_uuid, code) = self.master_unit.run("leader-get bootstrap-uuid")
+        assert leader_uuid
+
+        cmd_rel_get = ("relation-get -r `relation-ids cluster` "
+                       "bootstrap-uuid %s")
+        units = self.d.sentry['percona-cluster']
+        for unit in units:
+            for peer in units:
+                cmd = cmd_rel_get % peer.info['unit_name']
+                self.log.debug(cmd)
+                (output, code) = unit.run(cmd)
+                assert code == 0
+                assert output == leader_uuid, "%s != %s" % (output,
+                                                            leader_uuid)
+
     def find_master(self, ha=True):
         for unit in self.d.sentry['percona-cluster']:
             if not ha:
