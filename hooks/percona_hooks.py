@@ -33,6 +33,7 @@ from charmhelpers.core.host import (
     service_start,
     file_hash,
     lsb_release,
+    CompareHostReleases,
 )
 from charmhelpers.core.templating import render
 from charmhelpers.fetch import (
@@ -140,8 +141,9 @@ def install_percona_xtradb_cluster():
 @harden()
 def install():
     execd_preinstall()
-    if config('source') is None and \
-            lsb_release()['DISTRIB_CODENAME'] < 'trusty':
+    _release = lsb_release()['DISTRIB_CODENAME'].lower()
+    if (config('source') is None and
+            CompareHostReleases(_release) < 'trusty'):
         setup_percona_repo()
     elif config('source') is not None:
         add_source(config('source'), config('key'))

@@ -14,6 +14,7 @@ from charmhelpers.core.host import (
     mkdir,
     service,
     pwgen,
+    CompareHostReleases,
 )
 from charmhelpers.core.hookenv import (
     charm_dir,
@@ -78,7 +79,7 @@ REQUIRED_INTERFACES = {}
 
 
 def determine_packages():
-    if lsb_release()['DISTRIB_CODENAME'] >= 'wily':
+    if CompareHostReleases(lsb_release()['DISTRIB_CODENAME']) >= 'wily':
         # NOTE(beisner): Use recommended mysql-client package
         # https://launchpad.net/bugs/1476845
         # https://launchpad.net/bugs/1571789
@@ -310,7 +311,8 @@ def update_hosts_file(map):
 
 def assert_charm_supports_ipv6():
     """Check whether we are able to support charms ipv6."""
-    if lsb_release()['DISTRIB_CODENAME'].lower() < "trusty":
+    _release = lsb_release()['DISTRIB_CODENAME'].lower()
+    if CompareHostReleases(_release) < "trusty":
         raise Exception("IPv6 is not supported in the charms for Ubuntu "
                         "versions less than Trusty 14.04")
 
@@ -492,7 +494,8 @@ def charm_check_func():
 
 @cached
 def resolve_data_dir():
-    if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
+    _release = lsb_release()['DISTRIB_CODENAME'].lower()
+    if CompareHostReleases(_release) < 'vivid':
         return '/var/lib/mysql'
     else:
         return '/var/lib/percona-xtradb-cluster'
@@ -500,7 +503,8 @@ def resolve_data_dir():
 
 @cached
 def resolve_cnf_file():
-    if lsb_release()['DISTRIB_CODENAME'] < 'vivid':
+    _release = lsb_release()['DISTRIB_CODENAME'].lower()
+    if CompareHostReleases(_release) < 'vivid':
         return '/etc/mysql/my.cnf'
     else:
         return '/etc/mysql/percona-xtradb-cluster.conf.d/mysqld.cnf'
