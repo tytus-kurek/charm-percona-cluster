@@ -1,6 +1,8 @@
-import sys
-
 import mock
+import os
+import shutil
+import sys
+import tempfile
 
 from test_utils import CharmTestCase
 
@@ -13,6 +15,7 @@ with mock.patch('charmhelpers.contrib.hardening.harden.harden') as mock_dec:
     mock_dec.side_effect = (lambda *dargs, **dkwargs: lambda f:
                             lambda *args, **kwargs: f(*args, **kwargs))
     import percona_hooks as hooks
+
 
 TO_PATCH = ['log', 'config',
             'get_db_helper',
@@ -294,3 +297,65 @@ class TestInstallPerconaXtraDB(CharmTestCase):
         self.configure_sstuser.assert_called_with('testpassword')
         self.apt_install.assert_called_with(['pxc-5.6'], fatal=True)
         self.run_mysql_checks.assert_not_called()
+
+
+class TestUpgradeCharm(CharmTestCase):
+    TO_PATCH = [
+        'config',
+        'log',
+        'is_leader',
+        'is_unit_paused_set',
+        'get_wsrep_value',
+        'config_changed',
+    ]
+
+    def print_log(self, msg, level=None):
+        print('juju-log: %s: %s' % (level, msg))
+
+    def setUp(self):
+        CharmTestCase.setUp(self, hooks, self.TO_PATCH)
+        self.config.side_effect = self.test_config.get
+        self.log.side_effect = self.print_log
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        CharmTestCase.tearDown(self)
+        try:
+            shutil.rmtree(self.tmpdir)
+        except:
+            pass
+
+    @mock.patch('percona_utils.is_leader')
+    @mock.patch('percona_utils.leader_set')
+    @mock.patch('percona_utils.relation_set')
+    @mock.patch('percona_utils.get_wsrep_value')
+    @mock.patch('percona_utils.relation_ids')
+    @mock.patch('percona_utils.resolve_data_dir')
+    def test_upgrade_charm(self, mock_data_dir, mock_rids, mock_wsrep,
+                           mock_rset, mock_lset, mock_is_leader):
+        mock_rids.return_value = ['cluster:22']
+        mock_is_leader.return_value = True
+        self.is_leader.return_value = True
+        self.is_unit_paused_set.return_value = False
+
+        def c(k):
+            values = {'wsrep_ready': 'on',
+                      'wsrep_cluster_state_uuid': '1234-abcd'}
+            return values[k]
+
+        self.get_wsrep_value.side_effect = c
+        mock_wsrep.side_effect = c
+        mock_data_dir.return_value = self.tmpdir
+
+        hooks.upgrade()
+
+        seeded_file = os.path.join(self.tmpdir, 'seeded')
+        self.assertTrue(os.path.isfile(seeded_file),
+                        "%s is not file" % seeded_file)
+        with open(seeded_file) as f:
+            self.assertEqual(f.read(), 'done')
+
+        mock_rset.assert_called_with(relation_id='cluster:22',
+                                     **{'bootstrap-uuid': '1234-abcd'})
+        mock_lset.assert_called_with(**{'bootstrap-uuid': '1234-abcd'})
+        self.config_changed.assert_called_with()
