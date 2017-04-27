@@ -39,6 +39,12 @@ class BasicDeployment(OpenStackAmuletDeployment):
                                     ("Please set the vip in local.yaml or "
                                      "env var AMULET_OS_VIP to run this test "
                                      "suite"))
+
+        # Currenlty serverstack is unable to validate HA
+        # temporarily turn off HA
+        self.vip = None
+        self.ha = False
+
         self.log = self.utils.get_logger()
 
     def _add_services(self):
@@ -51,7 +57,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
         this_service = {'name': 'percona-cluster',
                         'units': self.units}
         other_services = []
-        if self.units > 1:
+        if self.units > 1 and self.ha:
             other_services.append({'name': 'hacluster'})
 
         super(BasicDeployment, self)._add_services(this_service,
@@ -59,7 +65,8 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
     def _add_relations(self):
         """Add all of the relations for the services."""
-        if self.units > 1:
+
+        if self.units > 1 and self.ha:
             relations = {'percona-cluster:ha': 'hacluster:ha'}
             super(BasicDeployment, self)._add_relations(relations)
 
@@ -76,7 +83,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
                                    'C1w=')}
 
         configs = {}
-        if self.units > 1:
+        if self.units > 1 and self.ha:
             cfg_ha['cluster_count'] = str(self.units)
             configs['hacluster'] = cfg_ha
         configs['percona-cluster'] = cfg_percona
@@ -101,7 +108,8 @@ class BasicDeployment(OpenStackAmuletDeployment):
         self.test_bootstrapped_and_clustered()
         self.test_bootstrap_uuid_set_in_the_relation()
         self.test_pause_resume()
-        self.test_kill_master()
+        if self.ha:
+            self.test_kill_master()
 
     def test_pacemaker(self):
         '''
@@ -110,10 +118,11 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
         side effect: self.master_unit should be set after execution
         '''
-        if self.units > 1:
+
+        if self.units > 1 and self.ha:
             i = 0
             while i < 30 and not self.master_unit:
-                self.master_unit = self.find_master()
+                self.master_unit = self.find_master(ha=self.ha)
                 i += 1
                 time.sleep(10)
 
@@ -129,7 +138,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
             assert sorted(self.get_pcmkr_resources()) == sorted(resources)
         else:
-            self.master_unit = self.find_master(ha=False)
+            self.master_unit = self.find_master(ha=self.ha)
 
     def test_pxc_running(self):
         '''
@@ -217,7 +226,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
         while i < 10 and not changed:
             i += 1
             time.sleep(5)  # give some time to pacemaker to react
-            new_master = self.find_master()
+            new_master = self.find_master(ha=self.ha)
 
             if (new_master and new_master.info['unit_name'] !=
                     old_master.info['unit_name']):
