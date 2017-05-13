@@ -354,7 +354,7 @@ def db_changed(relation_id=None, unit=None, admin=None):
     if admin not in [True, False]:
         admin = relation_type() == 'db-admin'
 
-    db_name, _ = remote_unit().split("/")
+    db_name, _ = (unit or remote_unit()).split("/")
     username = db_name
     db_helper = get_db_helper()
     addr = relation_get('private-address', unit=unit, rid=relation_id)
