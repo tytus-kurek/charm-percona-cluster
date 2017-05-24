@@ -72,6 +72,33 @@ HOSTS_FILE = '/etc/hosts'
 REQUIRED_INTERFACES = {}
 
 
+class LeaderNoBootstrapUUIDError(Exception):
+    """Raised when the leader doesn't have set the bootstrap-uuid attribute"""
+    def __init__(self):
+        super(LeaderNoBootstrapUUIDError, self).__init__(
+            "the leader doesn't have set the bootstrap-uuid attribute")
+
+
+class InconsistentUUIDError(Exception):
+    """Raised when the leader and the unit have different UUIDs set"""
+    def __init__(self, leader_uuid, unit_uuid):
+        super(InconsistentUUIDError, self).__init__(
+            "Leader UUID ('%s') != Unit UUID ('%s')" % (leader_uuid,
+                                                        unit_uuid))
+
+
+class FakeOSConfigRenderer(object):
+    """This class is to provide to register_configs() as a 'fake'
+    OSConfigRenderer object that has a complete_contexts method that returns
+    an empty list.  This is so that the pause/resume framework can be used
+    from charmhelpers that requires configs to be able to run.
+    This is a bit of a hack, but via Python's duck-typing enables the function
+    to work.
+    """
+    def complete_contexts(self):
+        return []
+
+
 def determine_packages():
     if lsb_release()['DISTRIB_CODENAME'] >= 'wily':
         # NOTE(beisner): Use recommended mysql-client package
@@ -428,6 +455,48 @@ def notify_bootstrapped(cluster_rid=None, cluster_uuid=None):
         leader_set(**{'bootstrap-uuid': cluster_uuid})
 
 
+def update_bootstrap_uuid():
+    """This function verifies if the leader has set the bootstrap-uuid
+    attribute to then check it against the running cluster uuid, if the check
+    succeeds the bootstrap-uuid field is set in the cluster relation.
+
+    :returns: True if the cluster UUID was updated, False if the local UUID is
+              empty.
+    """
+
+    lead_cluster_state_uuid = leader_get('bootstrap-uuid')
+    if not lead_cluster_state_uuid:
+        log('Leader has not set bootstrap-uuid', level=DEBUG)
+        raise LeaderNoBootstrapUUIDError()
+
+    wsrep_ready = get_wsrep_value('wsrep_ready') or ""
+    log("wsrep_ready: '%s'" % wsrep_ready, DEBUG)
+    if wsrep_ready.lower() in ['on', 'ready']:
+        cluster_state_uuid = get_wsrep_value('wsrep_cluster_state_uuid')
+    else:
+        cluster_state_uuid = None
+
+    if not cluster_state_uuid:
+        log("UUID is empty: '%s'" % cluster_state_uuid, level=DEBUG)
+        return False
+    elif lead_cluster_state_uuid != cluster_state_uuid:
+        # this may mean 2 things:
+        # 1) the units have diverged, which it's bad and we do stop.
+        # 2) cluster_state_uuid could not be retrieved because it
+        # hasn't been bootstrapped, mysqld is stopped, etc.
+        log('bootstrap uuid differs: %s != %s' % (lead_cluster_state_uuid,
+                                                  cluster_state_uuid),
+            level=ERROR)
+        raise InconsistentUUIDError(lead_cluster_state_uuid,
+                                    cluster_state_uuid)
+
+    for rid in relation_ids('cluster'):
+        notify_bootstrapped(cluster_rid=rid,
+                            cluster_uuid=cluster_state_uuid)
+
+    return True
+
+
 def cluster_in_sync():
     '''
     Determines whether the current unit is in sync
@@ -477,18 +546,6 @@ def resolve_cnf_file():
         return '/etc/mysql/my.cnf'
     else:
         return '/etc/mysql/percona-xtradb-cluster.conf.d/mysqld.cnf'
-
-
-class FakeOSConfigRenderer(object):
-    """This class is to provide to register_configs() as a 'fake'
-    OSConfigRenderer object that has a complete_contexts method that returns
-    an empty list.  This is so that the pause/resume framework can be used
-    from charmhelpers that requires configs to be able to run.
-    This is a bit of a hack, but via Python's duck-typing enables the function
-    to work.
-    """
-    def complete_contexts(self):
-        return []
 
 
 def register_configs():
