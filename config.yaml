@@ -3,14 +3,29 @@ options:
     type: string
     default:
     description: |
-      Package install location for Percona XtraDB Cluster (defaults to distro
-      for >= 14.04)
+      Repository from which to install. May be one of the following:
+      distro (default), ppa:somecustom/ppa, a deb url sources entry,
+      or a supported Ubuntu Cloud Archive e.g.
+      .
+      cloud:<series>-<openstack-release>
+      cloud:<series>-<openstack-release>/updates
+      cloud:<series>-<openstack-release>/staging
+      cloud:<series>-<openstack-release>/proposed
+      .
+      See https://wiki.ubuntu.com/OpenStack/CloudArchive for info on which
+      cloud archives are available and supported.
   key:
     type: string
     default:
     description: |
-      Key ID to import to the apt keyring to support use with arbitary source
+      Key ID to import to the apt keyring to support use with arbitrary source
       configuration from outside of Launchpad archives or PPA's.
+  harden:
+    default:
+    type: string
+    description: |
+      Apply system hardening. Supports a space-delimited list of modules
+      to run. Supported modules currently include os, ssh, apache and mysql.
   innodb-file-per-table:
     type: boolean
     default: True
@@ -28,17 +43,18 @@ options:
     type: string
     default:
     description: |
-      (DEPRECATED - use innodb-buffer-pool-size) How much data should be kept
-      in memory in the DB. This will be used to tune settings in the database
-      server appropriately. Supported suffixes include K/M/G/T. If suffixed
-      with %, one will get that percentage of RAM allocated to the dataset.
+      [DEPRECATED] - use innodb-buffer-pool-size.
+      How much data should be kept in memory in the DB. This will be used to
+      tune settings in the database server appropriately. Supported suffixes
+      include K/M/G/T. If suffixed with %, one will get that percentage of RAM
+      allocated to the dataset.
   innodb-buffer-pool-size:
     type: string
     default:
     description: |
       By default this value will be set according to 50% of system total
       memory or 512MB (whichever is lowest) but also can be set to any specific
-      value for the system.  Supported suffixes include K/M/G/T. If suffixed
+      value for the system. Supported suffixes include K/M/G/T. If suffixed
       with %, one will get that percentage of system total memory allocated.
   innodb-change-buffering:
     type: string
@@ -47,9 +63,9 @@ options:
       Configure whether InnoDB performs change buffering, an optimization
       that delays write operations to secondary indexes so that the I/O
       operations can be performed sequentially.
-
+      .
       Permitted values include
-
+      .
         none        Do not buffer any operations.
         inserts     Buffer insert operations.
         deletes     Buffer delete marking operations; strictly speaking,
@@ -60,7 +76,7 @@ options:
                     in the background.
         all         The default. Buffer inserts, delete-marking
                     operations, and purges.
-
+      .
       For more details https://dev.mysql.com/doc/refman/5.6/en/innodb-parameters.html#sysvar_innodb_change_bufferring
   innodb-io-capacity:
     type: int
@@ -69,27 +85,28 @@ options:
       Configure the InnoDB IO capacity which sets an upper limit on I/O
       activity performed by InnoDB background tasks, such as flushing pages
       from the buffer pool and merging data from the change buffer.
-
+      .
       This value typically defaults to 200 but can be increased on systems
       with fast bus-attached SSD based storage to help the server handle the
       background maintenance work associated with a high rate of row changes.
-
+      .
       Alternatively it can be decreased to a minimum of 100 on systems with
       low speed 5400 or 7200 rpm spindles, to reduce the proportion of IO
       operations being used for background maintenance work.
-
+      .
       For more details https://dev.mysql.com/doc/refman/5.6/en/innodb-parameters.html#sysvar_innodb_io_capacity
   max-connections:
     type: int
     default: 600
     description: |
       Maximum connections to allow. A value of -1 means use the server's
-      compiled-in default.  This is not typically that useful so the
+      compiled-in default. This is not typically that useful so the
       charm will configure PXC with a default max-connections value of 600.
       Note: Connections take up memory resources. Either at startup time with
       performance-schema=True or during run time with performance-schema=False.
       This value is a balance between connection exhaustion and memory
       exhaustion.
+      .
       Consult a MySQL memory calculator like http://www.mysqlcalculator.com/ to
       understand memory resources consumed by connections.
       See also performance-schema.
@@ -104,14 +121,14 @@ options:
     type: string
     default:
     description: |
-      Root account password for new cluster nodes.  Overrides the automatic
+      Root account password for new cluster nodes. Overrides the automatic
       generation of a password for the root user, but must be set prior to
       deployment time to have any effect.
   sst-password:
     type: string
     default:
     description: |
-      SST account password for new cluster nodes.  Overrides the automatic
+      SST account password for new cluster nodes. Overrides the automatic
       generation of a password for the sst user, but must be set prior to
       deployment time to have any effect.
   sst-method:
@@ -132,8 +149,8 @@ options:
     type: boolean
     default: False
     description: |
-        Use DNS HA with MAAS 2.0. Note if this is set do not set vip
-        settings below.
+      Use DNS HA with MAAS 2.0. Note if this is set do not set vip
+      settings below.
   vip:
     type: string
     default:
@@ -160,8 +177,66 @@ options:
     description: |
       Default multicast port number that will be used to communicate between HA
       Cluster nodes.
-  # Network configuration options
-  # by default all access is over 'private-address'
+  lp1366997-workaround:
+    type: boolean
+    default: False
+    description: |
+      Adds two config options (wsrep_drupal_282555_workaround and
+      wsrep_retry_autocommit) as a workaround for Percona Primary Key bug (see
+      LP 1366997). Only required for Trusty.
+  enable-binlogs:
+    type: boolean
+    default: False
+    description: |
+      Turns on MySQL binary logs. The placement of the logs is controlled with
+      the binlogs_path config option.
+  binlogs-path:
+    type: string
+    default: /var/log/mysql/mysql-bin.log
+    description: |
+      Location on the filesystem where binlogs are going to be placed.
+      Default mimics what mysql-common package would do for mysql.
+      Make sure you do not put binlogs inside mysql datadir (/var/lib/mysql/)!
+  binlogs-max-size:
+    type: string
+    default: 100M
+    description: |
+      Sets the max_binlog_size mysql configuration option, which will limit the
+      size of the binary log files. The server will automatically rotate
+      binlogs after they grow to be bigger than this value.
+      Keep in mind that transactions are never split between binary logs, so
+      therefore binary logs might get larger than configured value.
+  binlogs-expire-days:
+    type: int
+    default: 10
+    description: |
+      Sets the expire_logs_days mysql configuration option, which will make
+      mysql server automatically remove logs older than configured number of
+      days.
+  performance-schema:
+    type: boolean
+    default: False
+    description: |
+      The performance schema attempts to automatically size the values of
+      several of its parameters at server startup if they are not set
+      explicitly. When set to on (True) memory is allocated at startup time.
+      The implications of this is any memory related charm config options such
+      as max-connections and innodb-buffer-pool-size must be explicitly set for
+      the environment percona is running in or percona may fail to start.
+      Default to off (False) at startup time giving 5.5 like behavior. The
+      implication of this is one can set configuration values that could lead
+      to memory exhaustion during run time as memory is not allocated at
+      startup time.
+  tuning-level:
+    type: string
+    default: safest
+    description: |
+      Valid values are 'safest', 'fast', and 'unsafe'. If set to 'safest', all
+      settings are tuned to have maximum safety at the cost of performance.
+      'fast' will turn off most controls, but may lose data on crashes.
+      'unsafe' will turn off all protections but this may be OK in clustered
+      deployments.
+  # Network config (by default all access is over 'private-address')
   access-network:
     type: string
     default:
@@ -194,86 +269,19 @@ options:
       order for this charm to function correctly, the privacy extension must be
       disabled and a non-temporary address must be configured/available on
       your network interface.
-  lp1366997-workaround:
-    type: boolean
-    default: False
-    description: |
-      Adds two config options (wsrep_drupal_282555_workaround and
-      wsrep_retry_autocommit) as a workaround for Percona Primary Key bug (see
-      LP 1366997).
-  # Nagios configuration options
+  # Monitoring config
   nagios_context:
     type: string
-    default: 'juju'
+    default: "juju"
     description: |
-      Used by the nrpe-external-master subordinate charm. A string that will be
-      prepended to instance name to set the host name in nagios. So for
-      instance the hostname would be something like:
-      .
-        juju-myservice-0
-      .
-      If you're running multiple environments with the same services in them
+      Used by the nrpe-external-master subordinate charm. A string that will
+      be prepended to instance name to set the host name in nagios. So for
+      instance the hostname would be something like 'juju-myservice-0'. If
+      you are running multiple environments with the same services in them
       this allows you to differentiate between them.
   nagios_servicegroups:
     type: string
-    default: ''
+    default: ""
     description: |
-      A comma-separated list of nagios servicegroups. If left empty, the
-      nagios_context will be used as the servicegroup.
-  harden:
-    default:
-    type: string
-    description: |
-      Apply system hardening. Supports a space-delimited list of modules
-      to run. Supported modules currently include os, ssh, apache and mysql.
-  enable-binlogs:
-    default: False
-    type: boolean
-    description: |
-      Turns on MySQL binary logs. The placement of the logs is controlled with
-      the binlogs_path config option.
-  binlogs-path:
-    default: /var/log/mysql/mysql-bin.log
-    type: string
-    description: |
-      Location on the filesystem where binlogs are going to be placed.
-      Default mimics what mysql-common package would do for mysql.
-      Make sure you do not put binlogs inside mysql datadir (/var/lib/mysql/)!
-  binlogs-max-size:
-    default: 100M
-    type: string
-    description: |
-      Sets the max_binlog_size mysql configuration option, which will limit the
-      size of the binary log files. The server will automatically rotate binlgos
-      after they grow to be bigger than this value.
-      Keep in mind that transactions are never split between binary logs, so
-      therefore binary logs might get larger than configured value.
-  binlogs-expire-days:
-    default: 10
-    type: int
-    description: |
-      Sets the expire_logs_days mysql configuration option, which will make
-      mysql server automatically remove logs older than configured number of
-      days.
-  performance-schema:
-    default: False
-    type: boolean
-    description: |
-      The performance schema attempts to automatically size the values of
-      several of its parameters at server startup if they are not set
-      explicitly. When set to on (True) memory is allocated at startup time.
-      The implications of this is any memory related charm config options such
-      as max-connections and innodb-buffer-pool-size must be explicitly set for
-      the environment percona is running in or percona may fail to start.
-      Default to off (False) at startup time giving 5.5 like behavior. The
-      implication of this is one can set configuration values that could lead
-      to memory exhaustion during run time as memory is not allocated at
-      startup time.
-  tuning-level:
-    default: safest
-    type: string
-    description: |
-      Valid values are 'safest', 'fast', and 'unsafe'. If set to 'safest', all
-      settings are tuned to have maximum safety at the cost of performance.
-      'fast' will turn off most controls, but may lose data on crashes. 'unsafe'
-      will turn off all protections but this may be OK in clustered deployments.
+      A comma-separated list of nagios service groups.
+      If left empty, the nagios_context will be used as the servicegroup
