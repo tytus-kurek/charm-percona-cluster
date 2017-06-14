@@ -105,6 +105,7 @@ from percona_utils import (
     pxc_installed,
     update_bootstrap_uuid,
     LeaderNoBootstrapUUIDError,
+    update_root_password,
 )
 
 
@@ -337,6 +338,11 @@ def config_changed():
         update_nrpe_config()
 
     open_port(DEFAULT_MYSQL_PORT)
+
+    # the password needs to be updated only if the node was already
+    # bootstrapped
+    if bootstrapped:
+        update_root_password()
 
 
 @hooks.hook('cluster-relation-joined')

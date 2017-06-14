@@ -70,10 +70,24 @@ class TestConfig(object):
 
     def __init__(self):
         self.config = get_default_config()
+        self.config_prev = {}
+
+    def previous(self, k):
+        return self.config_prev[k] if k in self.config_prev else self.config[k]
+
+    def set_previous(self, k, v):
+        self.config_prev[k] = v
+
+    def unset_previous(self, k):
+        if k in self.config_prev:
+            self.config_prev.pop(k)
+
+    def changed(self, k):
+        return self.get(k) != self.previous(k)
 
     def get(self, attr=None):
         if not attr:
-            return self.get_all()
+            return self
         try:
             return self.config[attr]
         except KeyError:
@@ -86,6 +100,9 @@ class TestConfig(object):
         if attr not in self.config:
             raise KeyError
         self.config[attr] = value
+
+    def __getitem__(self, k):
+        return self.get(k)
 
 
 class TestRelation(object):

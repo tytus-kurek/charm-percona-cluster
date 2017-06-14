@@ -13,6 +13,9 @@ from charmhelpers.contrib.openstack.amulet.deployment import (
 from charmhelpers.contrib.amulet.utils import AmuletUtils
 
 
+PXC_ROOT_PASSWD = 'ubuntu'
+
+
 class BasicDeployment(OpenStackAmuletDeployment):
 
     utils = AmuletUtils()
@@ -73,7 +76,8 @@ class BasicDeployment(OpenStackAmuletDeployment):
     def _get_configs(self):
         """Configure all of the services."""
         cfg_percona = {'min-cluster-size': self.units,
-                       'vip': self.vip}
+                       'vip': self.vip,
+                       'root-password': PXC_ROOT_PASSWD}
 
         cfg_ha = {'debug': True,
                   'corosync_key': ('xZP7GDWV0e8Qs0GxWThXirNNYlScgi3sRTdZk/IXKD'
@@ -239,6 +243,31 @@ class BasicDeployment(OpenStackAmuletDeployment):
         assert changed, "The master didn't change"
 
         assert self.is_port_open(address=self.vip), 'cannot connect to vip'
+
+    def test_change_root_password(self):
+        """
+        Change root password and verify the change was effectively applied.
+        """
+
+        new_root_passwd = 'openstack'
+
+        u = self.master_unit
+        root_password, _ = PXC_ROOT_PASSWD
+        cmd = "mysql -uroot -p{} -e\"select 1;\" ".format(root_password)
+        output, code = u.run(cmd)
+
+        assert code == 0, output
+
+        self.d.configure('percona-cluster', {'root-password': new_root_passwd})
+
+        time.sleep(5)  # give some time to the unit to start the hook
+        self.d.sentry.wait()  # wait until the hook finishes
+
+        # try to connect using the new root password
+        cmd = "mysql -uroot -p{} -e\"select 1;\" ".format(new_root_passwd)
+        output, code = u.run(cmd)
+
+        assert code == 0, output
 
     def find_master(self, ha=True):
         for unit in self.d.sentry['percona-cluster']:

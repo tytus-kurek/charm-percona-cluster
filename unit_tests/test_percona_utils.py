@@ -523,6 +523,8 @@ class TestUpdateBootstrapUUID(CharmTestCase):
         'relation_set',
         'is_leader',
         'leader_set',
+        'config',
+        'leader_get',
     ]
 
     def setUp(self):
@@ -583,3 +585,24 @@ class TestUpdateBootstrapUUID(CharmTestCase):
         self.get_wsrep_value.side_effect = fake_wsrep
         self.assertRaises(percona_utils.InconsistentUUIDError,
                           percona_utils.update_bootstrap_uuid)
+
+    @mock.patch('charmhelpers.contrib.database.mysql.leader_set')
+    @mock.patch('charmhelpers.contrib.database.mysql.is_leader')
+    @mock.patch('charmhelpers.contrib.database.mysql.leader_get')
+    def test_update_root_password(self, mock_leader_get, mock_is_leader,
+                                  mock_leader_set):
+        cur_password = 'openstack'
+        new_password = 'ubuntu'
+        leader_config = {'mysql.passwd': cur_password}
+        mock_leader_get.side_effect = lambda k: leader_config[k]
+        mock_is_leader.return_value = True
+
+        self.config.side_effect = self.test_config.get
+        self.assertFalse(percona_utils.update_root_password())
+
+        self.test_config.set_previous('root-password', cur_password)
+        self.test_config.set('root-password', new_password)
+        percona_utils.update_root_password()
+
+        mock_leader_set.assert_called_with(
+            settings={'mysql.passwd': new_password})

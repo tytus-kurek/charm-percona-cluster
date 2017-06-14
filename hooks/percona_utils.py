@@ -820,3 +820,30 @@ def pxc_installed():
     @returns: boolean: indicating installation
     '''
     return os.path.exists('/usr/sbin/mysqld')
+
+
+def update_root_password():
+    """Update root password if needed
+
+    :returns: `False` when configured password has not changed
+    """
+
+    cfg = config()
+    if not cfg.changed('root-password'):
+        return False
+
+    m_helper = get_db_helper()
+
+    # password that needs to be set
+    new_root_passwd = cfg['root-password']
+    m_helper.set_mysql_root_password(new_root_passwd)
+
+    # check the password was changed
+    try:
+        m_helper.connect(user='root', password=new_root_passwd)
+        m_helper.execute('select 1;')
+    except OperationalError as ex:
+        log("Error connecting using new passowrd: %s" % str(ex), level=DEBUG)
+        log(('Cannot connect using new password, not updating password in '
+             'the relation'), level=WARNING)
+        return
