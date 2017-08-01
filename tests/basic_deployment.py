@@ -27,7 +27,9 @@ class BasicDeployment(OpenStackAmuletDeployment):
         self.units = units
         self.master_unit = None
         self.vip = None
+        self.ha = False
         if units > 1:
+            self.ha = True
             if vip:
                 self.vip = vip
             elif 'AMULET_OS_VIP' in os.environ:
@@ -42,12 +44,6 @@ class BasicDeployment(OpenStackAmuletDeployment):
                                     ("Please set the vip in local.yaml or "
                                      "env var AMULET_OS_VIP to run this test "
                                      "suite"))
-
-        # Currenlty serverstack is unable to validate HA
-        # temporarily turn off HA
-        self.vip = None
-        self.ha = False
-
         self.log = self.utils.get_logger()
 
     def _add_services(self):
