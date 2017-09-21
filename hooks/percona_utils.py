@@ -52,6 +52,9 @@ from charmhelpers.contrib.network.ip import (
 from charmhelpers.contrib.database.mysql import (
     MySQLHelper,
 )
+from charmhelpers.contrib.hahelpers.cluster import (
+    is_clustered,
+)
 from charmhelpers.contrib.openstack.utils import (
     make_assess_status_func,
     pause_unit,
@@ -711,6 +714,11 @@ def cluster_ready():
 
     @returns boolean
     """
+    if config("vip") and not is_clustered():
+        log("Waiting on hacluster to complete clustering, not clustered yet.",
+            DEBUG)
+        return False
+
     min_size = config('min-cluster-size')
     units = 1
     for relation_id in relation_ids('cluster'):
