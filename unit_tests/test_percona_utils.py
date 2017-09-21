@@ -253,6 +253,7 @@ TO_PATCH = [
     'relation_get',
     'leader_get',
     'is_unit_paused_set',
+    'is_clustered',
 ]
 
 
@@ -412,6 +413,20 @@ class UtilsTestsCTC(CharmTestCase):
         self.relation_get.return_value = None
         _config = {'min-cluster-size': None}
         self.config.side_effect = lambda key: _config.get(key)
+        self.assertTrue(percona_utils.cluster_ready())
+
+        # When VIP configured check is_clustered
+        mock_is_sufficient_peers.return_value = True
+        self.relation_ids.return_value = ['cluster:0']
+        self.related_units.return_value = ['test/0', 'test/1']
+        self.relation_get.return_value = 'UUID'
+        _config = {'vip': '10.10.10.10', 'min-cluster-size': 3}
+        self.config.side_effect = lambda key: _config.get(key)
+        # HACluster not ready
+        self.is_clustered.return_value = False
+        self.assertFalse(percona_utils.cluster_ready())
+        # HACluster ready
+        self.is_clustered.return_value = True
         self.assertTrue(percona_utils.cluster_ready())
 
     @mock.patch.object(percona_utils, 'cluster_ready')
