@@ -108,6 +108,7 @@ from percona_utils import (
     update_root_password,
 )
 
+from charmhelpers.core.unitdata import kv
 
 hooks = Hooks()
 
@@ -118,6 +119,8 @@ RES_MONITOR_PARAMS = ('params user="sstuser" password="%(sstpass)s" '
                       'cluster_type="pxc" '
                       'op monitor interval="1s" timeout="30s" '
                       'OCF_CHECK_LEVEL="1"')
+
+INITIAL_CLIENT_UPDATE_KEY = 'initial_client_update_done'
 
 
 def install_percona_xtradb_cluster():
@@ -261,6 +264,11 @@ def update_shared_db_rels():
         for r_id in relation_ids('shared-db'):
             for unit in related_units(r_id):
                 shared_db_changed(r_id, unit)
+        kvstore = kv()
+        update_done = kvstore.get(INITIAL_CLIENT_UPDATE_KEY, False)
+        if not update_done:
+            kvstore.set(key=INITIAL_CLIENT_UPDATE_KEY, value=True)
+            kvstore.flush()
 
 
 @hooks.hook('upgrade-charm')
@@ -759,7 +767,9 @@ def main():
         hooks.execute(sys.argv)
     except UnregisteredHookError as e:
         log('Unknown hook {} - skipping.'.format(e))
-    update_shared_db_rels()
+    kvstore = kv()
+    if not kvstore.get(INITIAL_CLIENT_UPDATE_KEY, False):
+        update_shared_db_rels()
     assess_status(register_configs())
 
 
