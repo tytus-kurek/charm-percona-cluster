@@ -8,3 +8,5 @@ __pycache__
 *.sw[nop]
 .testrepository
 .tox
+.stestr
+func-results.json
