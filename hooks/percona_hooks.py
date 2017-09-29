@@ -338,9 +338,9 @@ def config_changed():
     # (re)install pcmkr agent
     install_mysql_ocf()
 
-    if relation_ids('ha'):
+    for rid in relation_ids('ha'):
         # make sure all the HA resources are (re)created
-        ha_relation_joined()
+        ha_relation_joined(relation_id=rid)
 
     if is_relation_made('nrpe-external-master'):
         update_nrpe_config()
