@@ -528,13 +528,13 @@ def shared_db_changed(relation_id=None, unit=None):
         # with the info dies the settings die with it Bug# 1355848
         if is_relation_made('cluster'):
             for rel_id in relation_ids('shared-db'):
-                peerdb_settings = \
+                client_settings = \
                     peer_retrieve_by_prefix(rel_id, exc_list=['hostname'])
 
-                passwords = [key for key in peerdb_settings.keys()
+                passwords = [key for key in client_settings.keys()
                              if 'password' in key.lower()]
                 if len(passwords) > 0:
-                    relation_set(relation_id=rel_id, **peerdb_settings)
+                    relation_set(relation_id=rel_id, **client_settings)
         return
 
     # Bail if leader is not ready
@@ -579,7 +579,8 @@ def shared_db_changed(relation_id=None, unit=None):
         db_host = get_db_host(hostname)
         peer_store_and_set(relation_id=relation_id,
                            db_host=db_host,
-                           password=password)
+                           password=password,
+                           allowed_units=allowed_units)
     else:
         # Process multiple database setup requests.
         # from incoming relation data:
@@ -632,9 +633,11 @@ def shared_db_changed(relation_id=None, unit=None):
                 a_units = db_helper.get_allowed_units(database, username,
                                                       relation_id=relation_id)
                 a_units = ' '.join(unit_sorted(a_units))
-                allowed_units['%s_allowed_units' % (db)] = a_units
+                allowed_units_key = '%s_allowed_units' % (db)
+                allowed_units[allowed_units_key] = a_units
 
                 return_data['%s_password' % (db)] = password
+                return_data[allowed_units_key] = a_units
                 db_host = get_db_host(hostname)
 
         if allowed_units:

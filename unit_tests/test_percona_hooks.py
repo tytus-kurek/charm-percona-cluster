@@ -33,7 +33,78 @@ TO_PATCH = ['log', 'config',
             'get_ipv6_addr',
             'get_hacluster_config',
             'update_dns_ha_resource_params',
-            'sst_password']
+            'sst_password',
+            'seeded',
+            'is_leader',
+            'leader_node_is_ready',
+            'get_db_helper',
+            'peer_store_and_set',
+            'leader_get',
+            'relation_clear',
+            'is_relation_made',
+            'peer_retrieve_by_prefix',
+            'client_node_is_ready',
+            'relation_set',
+            'relation_get']
+
+
+class TestSharedDBRelation(CharmTestCase):
+
+    def setUp(self):
+        CharmTestCase.setUp(self, hooks, TO_PATCH)
+        self.network_get_primary_address.side_effect = NotImplementedError
+        self.sst_password.return_value = 'ubuntu'
+
+    def test_allowed_units_non_leader(self):
+        self.seeded.return_value = True
+        self.is_leader.return_value = False
+        self.client_node_is_ready.return_value = True
+        self.is_relation_made.return_value = True
+        self.relation_ids.return_value = ['shared-db:3']
+        self.peer_retrieve_by_prefix.return_value = {
+            'password': 'pass123',
+            'allowed_units': 'keystone/1 keystone/2'}
+        hooks.shared_db_changed()
+        self.relation_set.assert_called_once_with(
+            allowed_units='keystone/1 keystone/2',
+            password='pass123',
+            relation_id='shared-db:3')
+
+    @mock.patch.object(hooks, 'get_db_host')
+    @mock.patch.object(hooks, 'configure_db_for_hosts')
+    def test_allowed_units_leader(self, configure_db_for_hosts, get_db_host):
+        self.config.return_value = None
+        allowed_unit_mock = mock.MagicMock()
+        allowed_unit_mock.get_allowed_units.return_value = [
+            'keystone/1',
+            'keystone/2']
+        self.get_db_helper.return_value = allowed_unit_mock
+        self.test_config.set('access-network', None)
+        self.seeded.return_value = True
+        self.is_leader.return_value = True
+        self.resolve_hostname_to_ip.return_value = '10.0.0.10'
+        self.relation_get.return_value = {
+            'hostname': 'keystone-0',
+            'database': 'keystone',
+            'username': 'keyuser',
+        }
+        get_db_host.return_value = 'dbhost1'
+        configure_db_for_hosts.return_value = 'password'
+        hooks.shared_db_changed()
+        self.relation_set.assert_called_once_with(
+            allowed_units='keystone/1 keystone/2',
+            relation_id=None)
+        calls = [
+            mock.call(
+                relation_id=None,
+                relation_settings={'access-network': None}),
+            mock.call(
+                relation_id=None,
+                db_host='dbhost1',
+                password='password',
+                allowed_units='keystone/1 keystone/2')
+        ]
+        self.peer_store_and_set.assert_has_calls(calls)
 
 
 class TestHARelation(CharmTestCase):
