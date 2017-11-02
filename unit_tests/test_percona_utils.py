@@ -485,14 +485,22 @@ class TestResolveHostnameToIP(CharmTestCase):
         CharmTestCase.setUp(self, percona_utils,
                             self.TO_PATCH)
 
-    def test_resolve_hostname_to_ip_ips(self):
+    @mock.patch.object(percona_utils, 'is_ipv6')
+    @mock.patch.object(percona_utils, 'is_ip')
+    @mock.patch.object(percona_utils, 'config', lambda *args: None)
+    def test_resolve_hostname_to_ip_ips(self, mock_is_ip, mock_is_ipv6):
         ipv6_address = '2a01:348:2f4:0:dba7:dc58:659b:941f'
         ipv4_address = '10.10.10.2'
         self.assertEqual(percona_utils.resolve_hostname_to_ip(ipv6_address),
                          ipv6_address)
+        self.assertTrue(mock_is_ip.called)
+        self.assertFalse(mock_is_ipv6.called)
         self.assertEqual(percona_utils.resolve_hostname_to_ip(ipv4_address),
                          ipv4_address)
+        self.assertTrue(mock_is_ip.called)
+        self.assertFalse(mock_is_ipv6.called)
 
+    @mock.patch.object(percona_utils, 'config', lambda *args: None)
     @mock.patch('dns.resolver.query')
     def test_resolve_hostname_to_ip_hostname_a(self,
                                                dns_query):
@@ -505,19 +513,30 @@ class TestResolveHostnameToIP(CharmTestCase):
             mock.call('myhostname', 'A'),
         ])
 
+    @mock.patch.object(percona_utils, 'is_ipv6')
+    @mock.patch.object(percona_utils, 'is_ip')
+    @mock.patch.object(percona_utils, 'config')
     @mock.patch('dns.resolver.query')
-    def test_resolve_hostname_to_ip_hostname_aaaa(self,
-                                                  dns_query):
+    def test_resolve_hostname_to_ip_hostname_aaaa(self, dns_query, mock_config,
+                                                  mock_is_ip, mock_is_ipv6):
+
+        def fake_config(key):
+            return {'prefer-ipv6': True}.get(key)
+
+        mock_config.side_effect = fake_config
         mock_answer = mock.MagicMock()
+        mock_is_ipv6.return_value = False
         mock_answer.address = '2a01:348:2f4:0:dba7:dc58:659b:941f'
         dns_query.return_value = [mock_answer]
-        self.assertEqual(percona_utils.resolve_hostname_to_ip('myhostname',
-                                                              ipv6=True),
+        self.assertEqual(percona_utils.resolve_hostname_to_ip('myhostname'),
                          '2a01:348:2f4:0:dba7:dc58:659b:941f')
+        self.assertFalse(mock_is_ip.called)
+        self.assertTrue(mock_is_ipv6.called)
         dns_query.assert_has_calls([
             mock.call('myhostname', 'AAAA'),
         ])
 
+    @mock.patch.object(percona_utils, 'config', lambda *args: None)
     @mock.patch('dns.resolver.query')
     def test_resolve_hostname_to_ip_hostname_noanswer(self,
                                                       dns_query):

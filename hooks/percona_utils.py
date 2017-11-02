@@ -48,6 +48,7 @@ from charmhelpers.contrib.network.ip import (
     get_address_in_network,
     get_ipv6_addr,
     is_ip,
+    is_ipv6,
 )
 from charmhelpers.contrib.database.mysql import (
     MySQLHelper,
@@ -147,7 +148,7 @@ def setup_percona_repo():
     subprocess.check_call(['apt-key', 'add', KEY])
 
 
-def resolve_hostname_to_ip(hostname, ipv6=False):
+def resolve_hostname_to_ip(hostname):
     """Resolve hostname to IP
 
     @param hostname: hostname to be resolved
@@ -160,18 +161,21 @@ def resolve_hostname_to_ip(hostname, ipv6=False):
                     fatal=True)
         import dns.resolver
 
-    if is_ip(hostname):
+    if config('prefer-ipv6'):
+        if is_ipv6(hostname):
+            return hostname
+
+        query_type = 'AAAA'
+    elif is_ip(hostname):
         return hostname
     else:
-        if ipv6:
-            query_type = 'AAAA'
-        else:
-            query_type = 'A'
-        # This may throw an NXDOMAIN exception; in which case
-        # things are badly broken so just let it kill the hook
-        answers = dns.resolver.query(hostname, query_type)
-        if answers:
-            return answers[0].address
+        query_type = 'A'
+
+    # This may throw an NXDOMAIN exception; in which case
+    # things are badly broken so just let it kill the hook
+    answers = dns.resolver.query(hostname, query_type)
+    if answers:
+        return answers[0].address
 
 
 def is_sufficient_peers():
