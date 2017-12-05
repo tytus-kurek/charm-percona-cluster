@@ -9,8 +9,8 @@ tags:
   - databases
 series:
   - xenial
+  - bionic
   - artful
-  - zesty
   - trusty
 extra-bindings:
   access:
