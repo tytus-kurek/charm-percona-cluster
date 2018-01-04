@@ -76,6 +76,8 @@ SEEDED_MARKER = "{data_dir}/seeded"
 HOSTS_FILE = '/etc/hosts'
 DEFAULT_MYSQL_PORT = 3306
 
+WSREP_FILE = "/etc/mysql/percona-xtradb-cluster.conf.d/wsrep.cnf"
+
 # NOTE(ajkavanagh) - this is 'required' for the pause/resume code for
 # maintenance mode, but is currently not populated as the
 # charm_check_function() checks whether the unit is working properly.
@@ -407,23 +409,15 @@ def is_bootstrapped():
 
     @returns boolean
     """
-    uuids = []
-    rids = relation_ids('cluster') or []
-    for rid in rids:
-        units = related_units(rid)
-        units.append(local_unit())
-        for unit in units:
-            id = relation_get('bootstrap-uuid', unit=unit, rid=rid)
-            if id:
-                uuids.append(id)
 
-    if uuids:
-        if len(set(uuids)) > 1:
-            log("Found inconsistent bootstrap uuids - %s" % (uuids), WARNING)
-
+    # Is the leader bootstrapped?
+    # Leader settings happen long before relation settings.
+    if leader_get('bootstrap-uuid'):
+        log("Leader is bootstrapped uuid: {}".format(
+            leader_get('bootstrap-uuid')), WARNING)
         return True
-
-    return False
+    else:
+        return False
 
 
 def bootstrap_pxc():

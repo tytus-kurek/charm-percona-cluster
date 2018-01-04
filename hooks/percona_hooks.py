@@ -730,8 +730,8 @@ def ha_relation_changed():
 def leader_settings_changed():
     '''Re-trigger install once leader has seeded passwords into install'''
     install_percona_xtradb_cluster()
-    # Notify any changes to data in leader storage
-    update_shared_db_rels()
+    # Need to render the template files
+    config_changed()
     log('leader-settings-changed', level='DEBUG')
     try:
         update_bootstrap_uuid()
