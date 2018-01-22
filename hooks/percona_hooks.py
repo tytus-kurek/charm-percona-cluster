@@ -33,6 +33,7 @@ from charmhelpers.core.hookenv import (
 from charmhelpers.core.host import (
     service_restart,
     service_start,
+    service_running,
     file_hash,
     lsb_release,
     CompareHostReleases,
@@ -206,9 +207,20 @@ def render_config(clustered=False, hosts=None):
     if wsrep_provider_options:
         context['wsrep_provider_options'] = wsrep_provider_options
 
+    if CompareHostReleases(lsb_release()['DISTRIB_CODENAME']) < 'bionic':
+        # myisam_recover is not valid for PXC 5.7 (introduced in Bionic) so we
+        # only set it for PXC 5.6.
+        context['myisam_recover'] = 'BACKUP'
+        context['wsrep_provider'] = '/usr/lib/libgalera_smm.so'
+    elif CompareHostReleases(lsb_release()['DISTRIB_CODENAME']) >= 'bionic':
+        context['wsrep_provider'] = '/usr/lib/galera3/libgalera_smm.so'
+        context['default_storage_engine'] = 'InnoDB'
+        context['wsrep_log_conflicts'] = True
+        context['innodb_autoinc_lock_mode'] = '2'
+        context['pxc_strict_mode'] = 'ENFORCING'
+
     context.update(PerconaClusterHelper().parse_config())
-    render(os.path.basename(config_file),
-           config_file, context, perms=0o444)
+    render(os.path.basename(config_file), config_file, context, perms=0o444)
 
 
 def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
@@ -239,7 +251,14 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
             # relation id exists yet.
             notify_bootstrapped()
             update_db_rels = True
-        else:
+        elif not service_running('mysql@bootstrap'):
+            # NOTE(jamespage):
+            # if mysql@bootstrap is running, then the native
+            # bootstrap systemd service was used to start this
+            # instance, and it was the initial seed unit
+            # so don't try start the mysql.service unit;
+            # this also deals with seed units after they have been
+            # rebooted and mysqld was started by mysql.service.
             delay = 1
             attempts = 0
             max_retries = 5

@@ -34,9 +34,11 @@ max_allowed_packet      = 16M
 thread_stack            = 192K
 thread_cache_size       = 8
 
+{% if myisam_recover -%}
 # This replaces the startup script and checks MyISAM tables if needed
 # the first time they are touched
-myisam-recover         = BACKUP
+myisam-recover         = {{ myisam_recover }}
+{% endif %}
 
 {% if max_connections != -1 -%}
 max_connections = {{ max_connections }}
@@ -45,6 +47,11 @@ max_connections = {{ max_connections }}
 {% if wait_timeout != -1 -%}
 # Seconds before clearing idle connections
 wait_timeout = {{ wait_timeout }}
+{% endif %}
+
+{% if pxc_strict_mode -%}
+# Avoid use of experimental and unsupported features in PXC
+pxc_strict_mode = {{ pxc_strict_mode }}
 {% endif %}
 
 #
@@ -75,6 +82,14 @@ max_binlog_size         = {{ binlogs_max_size }}
 # Required to allow trigger creation for openstack services
 log_bin_trust_function_creators = 1
 
+# In order for Galera to work correctly binlog format should be ROW
+binlog_format=ROW
+
+{% if default_storage_engine -%}
+# Default storage engine
+default_storage_engine = {{ default_storage_engine }}
+{% endif %}
+
 #
 # * InnoDB
 #
@@ -104,10 +119,16 @@ innodb_change_buffering = {{ innodb_change_buffering }}
 innodb_io_capacity = {{ innodb_io_capacity }}
 {% endif %}
 
+{% if innodb_autoinc_lock_mode -%}
+# InnoDB AUTO_INCREMENT Lock Mode
+innodb_autoinc_lock_mode = {{ innodb_autoinc_lock_mode }}
+{% endif %}
+
+
 #
 # * Galera
 #
-wsrep_provider=/usr/lib/libgalera_smm.so
+wsrep_provider={{ wsrep_provider }}
 
 # Add address of other cluster nodes here
 {% if not clustered and is_leader -%}
@@ -130,6 +151,11 @@ wsrep_cluster_name={{ cluster_name }}
 #
 # Authentication for SST method
 wsrep_sst_auth="sstuser:{{ sst_password }}"
+
+{% if wsrep_log_conflicts -%}
+# Log additional information about conflicts
+wsrep_log_conflicts
+{% endif %}
 
 {% if wsrep_provider_options -%}
 wsrep_provider_options = {{ wsrep_provider_options }}
