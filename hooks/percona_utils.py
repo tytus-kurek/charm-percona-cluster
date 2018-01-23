@@ -404,20 +404,51 @@ def get_wsrep_value(key):
     return None
 
 
+def is_leader_bootstrapped():
+    """ Check that the leader is bootstrapped and has set required settings
+
+    :side_effect: calls leader_get
+    :returns: boolean
+    """
+
+    check_settings = ['bootstrap-uuid', 'mysql.passwd',
+                      'root-password', 'sst-password']
+    leader_settings = leader_get()
+
+    # Is the leader bootstrapped?
+    for setting in check_settings:
+        if leader_settings.get(setting) is None:
+            log("Leader is NOT bootstrapped {}: {}".format(setting,
+                leader_settings.get('bootstrap-uuid')), DEBUG)
+            return False
+
+    log("Leader is bootstrapped uuid: {}".format(
+        leader_settings.get('bootstrap-uuid')), DEBUG)
+    return True
+
+
 def is_bootstrapped():
     """ Check that this unit is bootstrapped
 
     @returns boolean
     """
+    uuids = []
+    rids = relation_ids('cluster') or []
+    for rid in rids:
+        units = related_units(rid)
+        units.append(local_unit())
+        for unit in units:
+            id = relation_get('bootstrap-uuid', unit=unit, rid=rid)
+            if id:
+                uuids.append(id)
 
-    # Is the leader bootstrapped?
-    # Leader settings happen long before relation settings.
-    if leader_get('bootstrap-uuid'):
-        log("Leader is bootstrapped uuid: {}".format(
-            leader_get('bootstrap-uuid')), WARNING)
+    if uuids:
+        if len(set(uuids)) > 1:
+            log("Found inconsistent bootstrap uuids - %s" % (uuids), WARNING)
+
         return True
-    else:
-        return False
+
+    return False
 
 
 def bootstrap_pxc():
@@ -668,6 +699,9 @@ def _pause_resume_helper(f, configs):
 
 
 def create_binlogs_directory():
+    if not pxc_installed():
+        log("PXC not yet installed. Not setting up binlogs", DEBUG)
+        return
     binlogs_directory = os.path.dirname(config('binlogs-path'))
     data_dir = resolve_data_dir() + '/'
     if binlogs_directory.startswith(data_dir):

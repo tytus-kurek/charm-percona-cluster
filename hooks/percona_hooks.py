@@ -89,7 +89,7 @@ from percona_utils import (
     mark_seeded, seeded,
     install_mysql_ocf,
     notify_bootstrapped,
-    is_bootstrapped,
+    is_leader_bootstrapped,
     get_wsrep_value,
     assess_status,
     register_configs,
@@ -127,6 +127,10 @@ def install_percona_xtradb_cluster():
     '''Attempt PXC install based on seeding of passwords for users'''
     if pxc_installed():
         log('MySQL already installed, skipping')
+        return
+
+    if not is_leader() and not is_leader_bootstrapped():
+        log('Non-leader waiting on leader bootstrap, skipping percona install')
         return
 
     _root_password = root_password()
@@ -211,6 +215,9 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     it is started so long as the new node to be added is guaranteed to have
     been restarted so as to apply the new config.
     """
+    if not is_leader() and not is_leader_bootstrapped():
+        log('Non-leader waiting on leader bootstrap, skipping render')
+        return
     config_file = resolve_cnf_file()
     pre_hash = file_hash(config_file)
     render_config(clustered, hosts)
@@ -304,6 +311,8 @@ def upgrade():
 @hooks.hook('config-changed')
 @harden()
 def config_changed():
+    install_percona_xtradb_cluster()
+
     # if we are paused, delay doing any config changed hooks.  It is forced on
     # the resume.
     if is_unit_paused_set():
@@ -314,7 +323,7 @@ def config_changed():
 
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
-    bootstrapped = is_bootstrapped()
+    bootstrapped = is_leader_bootstrapped()
 
     # NOTE: only configure the cluster if we have sufficient peers. This only
     # applies if min-cluster-size is provided and is used to avoid extraneous
@@ -729,10 +738,11 @@ def ha_relation_changed():
 @hooks.hook('leader-settings-changed')
 def leader_settings_changed():
     '''Re-trigger install once leader has seeded passwords into install'''
+    if not is_leader_bootstrapped():
+        log('Leader is not fully bootstrapped, '
+            'skipping leader-setting-changed', level='DEBUG')
+        return
     install_percona_xtradb_cluster()
-    # Need to render the template files
-    config_changed()
-    log('leader-settings-changed', level='DEBUG')
     try:
         update_bootstrap_uuid()
     except LeaderNoBootstrapUUIDError:
@@ -740,6 +750,8 @@ def leader_settings_changed():
         # will evaluate to False, so it is necessary to feed back this info
         # to the user.
         status_set('waiting', "Waiting for bootstrap-uuid set by leader")
+
+    config_changed()
 
 
 @hooks.hook('nrpe-external-master-relation-joined',

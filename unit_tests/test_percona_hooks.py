@@ -24,7 +24,7 @@ TO_PATCH = ['log', 'config',
             'update_nrpe_config',
             'get_iface_for_address',
             'get_netmask_for_address',
-            'is_bootstrapped',
+            'is_leader_bootstrapped',
             'network_get_primary_address',
             'resolve_network_cidr',
             'unit_get',
@@ -291,7 +291,7 @@ class TestConfigChanged(CharmTestCase):
         'config',
         'is_unit_paused_set',
         'get_cluster_hosts',
-        'is_bootstrapped',
+        'is_leader_bootstrapped',
         'is_leader',
         'render_config_restart_on_changed',
         'update_shared_db_rels',
@@ -310,7 +310,7 @@ class TestConfigChanged(CharmTestCase):
     def test_config_changed_open_port(self):
         '''Ensure open_port is called with MySQL default port'''
         self.is_unit_paused_set.return_value = False
-        self.is_bootstrapped.return_value = False
+        self.is_leader_bootstrapped.return_value = False
         self.is_leader.return_value = False
         self.relation_ids.return_value = []
         self.is_relation_made.return_value = False
@@ -331,6 +331,8 @@ class TestInstallPerconaXtraDB(CharmTestCase):
         'configure_sstuser',
         'config',
         'run_mysql_checks',
+        'is_leader_bootstrapped',
+        'is_leader',
     ]
 
     def setUp(self):
@@ -351,6 +353,7 @@ class TestInstallPerconaXtraDB(CharmTestCase):
         self.configure_mysql_root_password.assert_not_called()
         self.configure_sstuser.assert_not_called()
         self.apt_install.assert_not_called()
+        self.is_leader_bootstrapped.return_value = True
 
         self.root_password.return_value = None
         self.sst_password.return_value = 'testpassword'
@@ -363,6 +366,7 @@ class TestInstallPerconaXtraDB(CharmTestCase):
         self.root_password.return_value = 'rootpassword'
         self.sst_password.return_value = 'testpassword'
         self.determine_packages.return_value = ['pxc-5.6']
+        self.is_leader_bootstrapped.return_value = True
         hooks.install_percona_xtradb_cluster()
         self.configure_mysql_root_password.assert_called_with('rootpassword')
         self.configure_sstuser.assert_called_with('testpassword')

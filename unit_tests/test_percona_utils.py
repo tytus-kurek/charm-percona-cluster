@@ -654,3 +654,24 @@ class TestUpdateBootstrapUUID(CharmTestCase):
 
         percona_utils.update_root_password()
         my_mock.set_mysql_root_password.assert_called_once_with('leaderpass')
+
+    def test_is_leader_bootstrapped_once(self):
+        leader_config = {'bootstrap-uuid': None, 'mysql.passwd': None,
+                         'root-password': None, 'sst-password': None}
+        self.leader_get.return_value = leader_config
+        self.assertFalse(percona_utils.is_leader_bootstrapped())
+
+        leader_config = {'bootstrap-uuid': 'UUID', 'mysql.passwd': None,
+                         'root-password': None, 'sst-password': None}
+        self.leader_get.return_value = leader_config
+        self.assertFalse(percona_utils.is_leader_bootstrapped())
+
+        leader_config = {'bootstrap-uuid': None, 'mysql.passwd': None,
+                         'root-password': 'pass', 'sst-password': None}
+        self.leader_get.return_value = leader_config
+        self.assertFalse(percona_utils.is_leader_bootstrapped())
+
+        leader_config = {'bootstrap-uuid': 'UUID', 'mysql.passwd': 'pass',
+                         'root-password': 'pass', 'sst-password': 'pass'}
+        self.leader_get.return_value = leader_config
+        self.assertTrue(percona_utils.is_leader_bootstrapped())
