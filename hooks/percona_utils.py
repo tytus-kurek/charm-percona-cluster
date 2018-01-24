@@ -841,7 +841,7 @@ def update_root_password():
     m_helper = get_db_helper()
 
     # password that needs to be set
-    new_root_passwd = cfg['root-password']
+    new_root_passwd = cfg['root-password'] or root_password()
     m_helper.set_mysql_root_password(new_root_passwd)
 
     # check the password was changed

@@ -640,3 +640,17 @@ class TestUpdateBootstrapUUID(CharmTestCase):
 
         mock_leader_set.assert_called_with(
             settings={'mysql.passwd': new_password})
+
+    @mock.patch.object(percona_utils, 'leader_get')
+    @mock.patch.object(percona_utils, 'get_db_helper')
+    def test_update_root_password_None(self, mock_get_db_helper,
+                                       mock_leader_get):
+        # Test fix for 1744961
+        my_mock = mock.Mock()
+        mock_get_db_helper.return_value = my_mock
+        self.config.side_effect = self.test_config.get
+        leader_config = {'root-password': 'leaderpass'}
+        mock_leader_get.side_effect = lambda k: leader_config[k]
+
+        percona_utils.update_root_password()
+        my_mock.set_mysql_root_password.assert_called_once_with('leaderpass')

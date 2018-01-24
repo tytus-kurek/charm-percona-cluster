@@ -83,6 +83,8 @@ class TestConfig(object):
             self.config_prev.pop(k)
 
     def changed(self, k):
+        if not self.config_prev:
+            return True
         return self.get(k) != self.previous(k)
 
     def get(self, attr=None):
