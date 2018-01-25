@@ -106,6 +106,7 @@ from percona_utils import (
     update_bootstrap_uuid,
     LeaderNoBootstrapUUIDError,
     update_root_password,
+    cluster_wait,
 )
 
 from charmhelpers.core.unitdata import kv
@@ -239,6 +240,8 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
             # new units will join and apply their own config.
             if not seeded():
                 action = service_restart
+                # If we are restarting avoid simultaneous restart collisions
+                cluster_wait()
             else:
                 action = service_start
 

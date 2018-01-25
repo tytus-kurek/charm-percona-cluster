@@ -55,6 +55,7 @@ from charmhelpers.contrib.database.mysql import (
 )
 from charmhelpers.contrib.hahelpers.cluster import (
     is_clustered,
+    distributed_wait,
 )
 from charmhelpers.contrib.openstack.utils import (
     make_assess_status_func,
@@ -887,3 +888,34 @@ def update_root_password():
         log(('Cannot connect using new password, not updating password in '
              'the relation'), level=WARNING)
         return
+
+
+def cluster_wait():
+    ''' Wait for operations based on modulo distribution
+
+    Use the distributed_wait function to determine how long to wait before
+    running an operation like restart or cluster join. By setting modulo to
+    the exact number of nodes in the cluster we get serial operations.
+
+    Check for explicit configuration parameters for modulo distribution.
+    The config setting modulo-nodes has first priority. If modulo-nodes is not
+    set, check min-cluster-size. Finally, if neither value is set, determine
+    how many peers there are from the cluster relation.
+
+    @side_effect: distributed_wait is called which calls time.sleep()
+    @return: None
+    '''
+    wait = config('known-wait')
+    if config('modulo-nodes') is not None:
+        # modulo-nodes has first priority
+        num_nodes = config('modulo-nodes')
+    elif config('min-cluster-size'):
+        # min-cluster-size is consulted next
+        num_nodes = config('min-cluster-size')
+    else:
+        # If nothing explicit is configured, determine cluster size based on
+        # peer relations
+        num_nodes = 1
+        for rid in relation_ids('cluster'):
+            num_nodes += len(related_units(rid))
+    distributed_wait(modulo=num_nodes, wait=wait)

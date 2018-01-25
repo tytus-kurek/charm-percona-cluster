@@ -285,3 +285,26 @@ options:
     description: |
       A comma-separated list of nagios service groups.
       If left empty, the nagios_context will be used as the servicegroup
+  modulo-nodes:
+    type: int
+    default:
+    description: |
+      This config option is rarely required but is provided for fine tuning, it
+      is safe to leave unset. Modulo nodes is used to help avoid restart
+      collisions as well as distribute load on the cloud at larger scale.
+      During restarts and cluster joins percona needs to execute these
+      operations serially. By setting modulo-nodes to the size of the cluster
+      and known-wait to a reasonable value, the charm will distribute the
+      operations serially. If this value is unset, the charm will check
+      min-cluster-size or else finally default to the size of the cluster
+      based on peer relations. Setting this value to 0 will execute operations
+      with no wait time. Setting this value to less than the cluster size will
+      distribute load but may lead to restart collisions.
+  known-wait:
+    type: int
+    default: 30
+    description: |
+      Known wait along with modulo nodes is used to help avoid restart
+      collisions. Known wait is the amount of time between one node executing
+      an operation and another. On slower hardware this value may need to be
+      larger than the default of 30 seconds.

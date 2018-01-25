@@ -254,6 +254,7 @@ TO_PATCH = [
     'leader_get',
     'is_unit_paused_set',
     'is_clustered',
+    'distributed_wait',
 ]
 
 
@@ -475,6 +476,33 @@ class UtilsTestsCTC(CharmTestCase):
         self.is_leader.return_value = True
         mock_cluster_ready.return_value = True
         self.assertTrue(percona_utils.leader_node_is_ready())
+
+    def test_cluster_wait(self):
+        self.relation_ids.return_value = ['amqp:27']
+        self.related_units.return_value = ['unit/1', 'unit/2', 'unit/3']
+        # Default check peer relation
+        _config = {'known-wait': 30}
+        self.config.side_effect = lambda key: _config.get(key)
+        percona_utils.cluster_wait()
+        self.distributed_wait.assert_called_with(modulo=4, wait=30)
+
+        # Use Min Cluster Size
+        _config = {'min-cluster-size': 5, 'known-wait': 30}
+        self.config.side_effect = lambda key: _config.get(key)
+        percona_utils.cluster_wait()
+        self.distributed_wait.assert_called_with(modulo=5, wait=30)
+
+        # Override with modulo-nodes
+        _config = {'min-cluster-size': 5, 'modulo-nodes': 10, 'known-wait': 60}
+        self.config.side_effect = lambda key: _config.get(key)
+        percona_utils.cluster_wait()
+        self.distributed_wait.assert_called_with(modulo=10, wait=60)
+
+        # Just modulo-nodes
+        _config = {'modulo-nodes': 10, 'known-wait': 60}
+        self.config.side_effect = lambda key: _config.get(key)
+        percona_utils.cluster_wait()
+        self.distributed_wait.assert_called_with(modulo=10, wait=60)
 
 
 class TestResolveHostnameToIP(CharmTestCase):
