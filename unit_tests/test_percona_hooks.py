@@ -24,7 +24,7 @@ TO_PATCH = ['log', 'config',
             'update_nrpe_config',
             'get_iface_for_address',
             'get_netmask_for_address',
-            'is_leader_bootstrapped',
+            'is_bootstrapped',
             'network_get_primary_address',
             'resolve_network_cidr',
             'unit_get',
@@ -292,30 +292,131 @@ class TestConfigChanged(CharmTestCase):
         'is_unit_paused_set',
         'get_cluster_hosts',
         'is_leader_bootstrapped',
+        'is_bootstrapped',
         'is_leader',
         'render_config_restart_on_changed',
-        'update_shared_db_rels',
+        'update_client_db_relations',
         'install_mysql_ocf',
         'relation_ids',
         'is_relation_made',
         'ha_relation_joined',
         'update_nrpe_config',
         'assert_charm_supports_ipv6',
+        'update_bootstrap_uuid',
+        'update_root_password',
+        'install_percona_xtradb_cluster',
+        'get_cluster_hosts',
+        'leader_get',
     ]
 
     def setUp(self):
         CharmTestCase.setUp(self, hooks, self.TO_PATCH)
         self.config.side_effect = self.test_config.get
+        self.is_unit_paused_set.return_value = False
+        self.is_leader.return_value = False
+        self.is_leader_bootstrapped.return_value = False
+        self.is_bootstrapped.return_value = False
+        self.relation_ids.return_value = []
+        self.is_relation_made.return_value = False
+        self.leader_get.return_value = '10.10.10.10'
+        self.get_cluster_hosts.return_value = []
 
     def test_config_changed_open_port(self):
         '''Ensure open_port is called with MySQL default port'''
-        self.is_unit_paused_set.return_value = False
-        self.is_leader_bootstrapped.return_value = False
-        self.is_leader.return_value = False
-        self.relation_ids.return_value = []
-        self.is_relation_made.return_value = False
         hooks.config_changed()
         self.open_port.assert_called_with(3306)
+
+    def test_config_changed_render_leader(self):
+        '''Ensure configuration is only rendered when ready for the leader'''
+        self.is_leader.return_value = True
+
+        # Render without hosts
+        hooks.config_changed()
+        self.install_percona_xtradb_cluster.assert_called_once_with()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            False, [], bootstrap=True)
+
+        # Render with hosts, not bootstrapped
+        # NOTE: It is unclear this scenario could occur.
+        # We may need to preclude it from occuring.
+        self.is_leader_bootstrapped.return_value = False
+        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30']
+        self.is_bootstrapped.return_value = True
+
+        self.render_config_restart_on_changed.reset_mock()
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            True, ['10.10.10.20', '10.10.10.30'], bootstrap=True)
+
+        # Render with hosts, bootstrapped
+        self.is_leader_bootstrapped.return_value = True
+        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30']
+        self.is_bootstrapped.return_value = True
+
+        self.render_config_restart_on_changed.reset_mock()
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            True, ['10.10.10.20', '10.10.10.30'], bootstrap=False)
+
+    def test_config_changed_render_non_leader(self):
+        '''Ensure configuration is only rendered when ready for
+        non-leaders'''
+
+        # Do not render
+        hooks.config_changed()
+        self.install_percona_xtradb_cluster.assert_called_once_with()
+        self.render_config_restart_on_changed.assert_not_called()
+
+        # Bug #1738896
+        # Avoid clusterend = False and rendering for non-leader.
+        # This should no longer be possible in the code. Thus the test.
+        # Instead use the leader.
+        self.is_leader_bootstrapped.return_value = True
+
+        self.render_config_restart_on_changed.reset_mock()
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            True, ['10.10.10.10'])
+
+        # Bug #1738896
+        # Avoid clustered = Flase,  bootstrapped = True
+        # and rendering for non-leader.
+        # This should no longer be possible in the code. Thus the test.
+        # Instead use the leader.
+        self.is_leader_bootstrapped.return_value = True
+        self.is_bootstrapped.return_value = True
+
+        self.render_config_restart_on_changed.reset_mock()
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            True, ['10.10.10.10'])
+
+        # Just one host, bootstrapped
+        self.render_config_restart_on_changed.reset_mock()
+        self.get_cluster_hosts.return_value = ['10.10.10.20']
+
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            True, ['10.10.10.10'])
+
+        # Missing leader, bootstrapped
+        self.render_config_restart_on_changed.reset_mock()
+        self.is_bootstrapped.return_value = True
+        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30']
+
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            True, ['10.10.10.10', '10.10.10.20', '10.10.10.30'])
+
+        # Leader present, bootstrapped
+        self.render_config_restart_on_changed.reset_mock()
+        self.is_bootstrapped.return_value = True
+        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30',
+                                               '10.10.10.10']
+
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            True, ['10.10.10.20', '10.10.10.30', '10.10.10.10'])
 
 
 class TestInstallPerconaXtraDB(CharmTestCase):
@@ -382,6 +483,8 @@ class TestUpgradeCharm(CharmTestCase):
         'is_unit_paused_set',
         'get_wsrep_value',
         'config_changed',
+        'get_relation_ip',
+        'leader_set',
     ]
 
     def print_log(self, msg, level=None):
@@ -412,6 +515,7 @@ class TestUpgradeCharm(CharmTestCase):
         mock_is_leader.return_value = True
         self.is_leader.return_value = True
         self.is_unit_paused_set.return_value = False
+        self.get_relation_ip.return_value = '10.10.10.10'
 
         def c(k):
             values = {'wsrep_ready': 'on',
@@ -433,4 +537,5 @@ class TestUpgradeCharm(CharmTestCase):
         mock_rset.assert_called_with(relation_id='cluster:22',
                                      **{'bootstrap-uuid': '1234-abcd'})
         mock_lset.assert_called_with(**{'bootstrap-uuid': '1234-abcd'})
-        self.config_changed.assert_called_with()
+
+        self.leader_set.assert_called_with(**{'leader-ip': '10.10.10.10'})

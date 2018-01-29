@@ -107,7 +107,7 @@ innodb_io_capacity = {{ innodb_io_capacity }}
 wsrep_provider=/usr/lib/libgalera_smm.so
 
 # Add address of other cluster nodes here
-{% if not clustered -%}
+{% if not clustered and is_leader -%}
 # Empty gcomm address is being used when cluster is getting bootstrapped
 wsrep_cluster_address=gcomm://
 {% else -%}

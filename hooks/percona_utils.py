@@ -412,8 +412,8 @@ def is_leader_bootstrapped():
     :returns: boolean
     """
 
-    check_settings = ['bootstrap-uuid', 'mysql.passwd',
-                      'root-password', 'sst-password']
+    check_settings = ['bootstrap-uuid', 'mysql.passwd', 'root-password',
+                      'sst-password', 'leader-ip']
     leader_settings = leader_get()
 
     # Is the leader bootstrapped?
@@ -799,7 +799,7 @@ def cluster_ready():
 
 
 def client_node_is_ready():
-    """Determine if the leader node has set shared-db client data
+    """Determine if the leader node has set client data
 
     @returns boolean
     """
@@ -809,6 +809,12 @@ def client_node_is_ready():
     if not cluster_ready():
         return False
     for rid in relation_ids('shared-db'):
+        if leader_get(attribute='{}_password'.format(rid)):
+            return True
+    for rid in relation_ids('db-admin'):
+        if leader_get(attribute='{}_password'.format(rid)):
+            return True
+    for rid in relation_ids('db'):
         if leader_get(attribute='{}_password'.format(rid)):
             return True
     return False

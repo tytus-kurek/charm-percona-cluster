@@ -700,6 +700,7 @@ class TestUpdateBootstrapUUID(CharmTestCase):
         self.assertFalse(percona_utils.is_leader_bootstrapped())
 
         leader_config = {'bootstrap-uuid': 'UUID', 'mysql.passwd': 'pass',
-                         'root-password': 'pass', 'sst-password': 'pass'}
+                         'root-password': 'pass', 'sst-password': 'pass',
+                         'leader-ip': '10.10.10.10'}
         self.leader_get.return_value = leader_config
         self.assertTrue(percona_utils.is_leader_bootstrapped())

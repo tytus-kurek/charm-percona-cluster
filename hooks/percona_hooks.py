@@ -26,6 +26,7 @@ from charmhelpers.core.hookenv import (
     network_get_primary_address,
     charm_name,
     leader_get,
+    leader_set,
     open_port,
     status_set,
 )
@@ -51,9 +52,7 @@ from charmhelpers.contrib.database.mysql import (
     PerconaClusterHelper,
 )
 from charmhelpers.contrib.hahelpers.cluster import (
-    is_elected_leader,
     is_clustered,
-    DC_RESOURCE_NAME,
     get_hacluster_config,
 )
 from charmhelpers.payload.execd import execd_preinstall
@@ -64,6 +63,7 @@ from charmhelpers.contrib.network.ip import (
     get_ipv6_addr,
     is_address_in_network,
     resolve_network_cidr,
+    get_relation_ip,
 )
 from charmhelpers.contrib.charmsupport import nrpe
 from charmhelpers.contrib.hardening.harden import harden
@@ -89,6 +89,7 @@ from percona_utils import (
     mark_seeded, seeded,
     install_mysql_ocf,
     notify_bootstrapped,
+    is_bootstrapped,
     is_leader_bootstrapped,
     get_wsrep_value,
     assess_status,
@@ -131,7 +132,8 @@ def install_percona_xtradb_cluster():
         return
 
     if not is_leader() and not is_leader_bootstrapped():
-        log('Non-leader waiting on leader bootstrap, skipping percona install')
+        log('Non-leader waiting on leader bootstrap, skipping percona install',
+            DEBUG)
         return
 
     _root_password = root_password()
@@ -187,6 +189,7 @@ def render_config(clustered=False, hosts=None):
         'binlogs_max_size': config('binlogs-max-size'),
         'binlogs_expire_days': config('binlogs-expire-days'),
         'performance_schema': config('performance-schema'),
+        'is_leader': is_leader(),
     }
 
     if config('prefer-ipv6'):
@@ -216,8 +219,9 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     it is started so long as the new node to be added is guaranteed to have
     been restarted so as to apply the new config.
     """
-    if not is_leader() and not is_leader_bootstrapped():
-        log('Non-leader waiting on leader bootstrap, skipping render')
+    if not is_leader() and not is_bootstrapped():
+        log('Non-leader waiting on leader bootstrap, skipping render',
+            DEBUG)
         return
     config_file = resolve_cnf_file()
     pre_hash = file_hash(config_file)
@@ -262,18 +266,25 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
         mark_seeded()
 
         if update_db_rels:
-            update_shared_db_rels()
+            update_client_db_relations()
     else:
         log("Config file '{}' unchanged".format(config_file), level=DEBUG)
 
 
-def update_shared_db_rels():
-    """ Upate client shared-db relations IFF ready
+def update_client_db_relations():
+    """ Upate client db relations IFF ready
     """
     if leader_node_is_ready() or client_node_is_ready():
         for r_id in relation_ids('shared-db'):
             for unit in related_units(r_id):
                 shared_db_changed(r_id, unit)
+        for r_id in relation_ids('db'):
+            for unit in related_units(r_id):
+                db_changed(r_id, unit, admin=False)
+        for r_id in relation_ids('db-admin'):
+            for unit in related_units(r_id):
+                db_changed(r_id, unit, admin=True)
+
         kvstore = kv()
         update_done = kvstore.get(INITIAL_CLIENT_UPDATE_KEY, False)
         if not update_done:
@@ -289,6 +300,9 @@ def upgrade():
         if is_unit_paused_set():
             log('Unit is paused, skiping upgrade', level=INFO)
             return
+
+        # Set the Leader's IP
+        leader_set(**{'leader-ip': get_relation_ip('cluster')})
 
         # broadcast the bootstrap-uuid
         wsrep_ready = get_wsrep_value('wsrep_ready') or ""
@@ -308,12 +322,15 @@ def upgrade():
         except LeaderNoBootstrapUUIDError:
             status_set('waiting', "Waiting for bootstrap-uuid set by leader")
 
-    config_changed()
-
 
 @hooks.hook('config-changed')
 @harden()
 def config_changed():
+
+    # It is critical that the installation is attempted first before any
+    # rendering of the configuration files occurs.
+    # install_percona_xtradb_cluster has the code to decide if this is the
+    # leader or if the leader is bootstrapped and therefore ready for install.
     install_percona_xtradb_cluster()
 
     # if we are paused, delay doing any config changed hooks.  It is forced on
@@ -326,17 +343,31 @@ def config_changed():
 
     hosts = get_cluster_hosts()
     clustered = len(hosts) > 1
-    bootstrapped = is_leader_bootstrapped()
+    bootstrapped = is_bootstrapped()
+    leader_bootstrapped = is_leader_bootstrapped()
+    leader_ip = leader_get('leader-ip')
+
+    # Handle Edge Cases
+    if not is_leader():
+        # Fix Bug #1738896
+        # Speed up cluster process
+        if not clustered and leader_bootstrapped:
+            clustered = True
+            bootstrapped = True
+            hosts = [leader_ip]
+        # Fix gcomm timeout to non-bootstrapped node
+        if hosts and leader_ip not in hosts:
+            hosts = [leader_ip] + hosts
 
     # NOTE: only configure the cluster if we have sufficient peers. This only
     # applies if min-cluster-size is provided and is used to avoid extraneous
     # configuration changes and premature bootstrapping as the cluster is
     # deployed.
     if is_leader():
-        log("Leader unit - bootstrap required=%s" % (not bootstrapped),
+        log("Leader unit - bootstrap required=%s" % (not leader_bootstrapped),
             DEBUG)
         render_config_restart_on_changed(clustered, hosts,
-                                         bootstrap=not bootstrapped)
+                                         bootstrap=not leader_bootstrapped)
     elif bootstrapped:
         log("Cluster is bootstrapped - configuring mysql on this node",
             DEBUG)
@@ -344,8 +375,17 @@ def config_changed():
     else:
         log("Not configuring", DEBUG)
 
+    if bootstrapped:
+        try:
+            update_bootstrap_uuid()
+        except LeaderNoBootstrapUUIDError:
+            # until the bootstrap-uuid attribute is not replicated
+            # cluster_ready() will evaluate to False, so it is necessary to
+            # feed back this info to the user.
+            status_set('waiting', "Waiting for bootstrap-uuid set by leader")
+
     # Notify any changes to the access network
-    update_shared_db_rels()
+    update_client_db_relations()
 
     # (re)install pcmkr agent
     install_mysql_ocf()
@@ -409,18 +449,49 @@ def cluster_changed():
     config_changed()
 
 
+def clear_and_populate_client_db_relations(relation_id, relation_name):
+    # NOTE(jamespage): relation level data candidate
+    log('Service is peered, clearing {} relation '
+        'as this service unit is not the leader'.format(relation_name))
+    relation_clear(relation_id)
+    # Each unit needs to set the db information otherwise if the unit
+    # with the info dies the settings die with it Bug# 1355848
+    if is_relation_made('cluster'):
+        for rel_id in relation_ids(relation_name):
+            client_settings = \
+                peer_retrieve_by_prefix(rel_id, exc_list=['hostname'])
+
+            passwords = [key for key in client_settings.keys()
+                         if 'password' in key.lower()]
+            if len(passwords) > 0:
+                relation_set(relation_id=rel_id, **client_settings)
+
+
 # TODO: This could be a hook common between mysql and percona-cluster
 @hooks.hook('db-relation-changed')
 @hooks.hook('db-admin-relation-changed')
 def db_changed(relation_id=None, unit=None, admin=None):
-    if not is_elected_leader(DC_RESOURCE_NAME):
-        log('Service is peered, clearing db relation'
-            ' as this service unit is not the leader')
-        relation_clear(relation_id)
-        return
 
+    # Is this db-admin or db relation
     if admin not in [True, False]:
         admin = relation_type() == 'db-admin'
+    if admin:
+        relation_name = 'db-admin'
+    else:
+        relation_name = 'db'
+
+    if not seeded():
+        log("Percona cluster not yet bootstrapped - deferring {} relation "
+            "until bootstrapped.".format(relation_name), DEBUG)
+        return
+
+    if not is_leader() and client_node_is_ready():
+        clear_and_populate_client_db_relations(relation_id, relation_name)
+        return
+
+    # Bail if leader is not ready
+    if not leader_node_is_ready():
+        return
 
     db_name, _ = (unit or remote_unit()).split("/")
     username = db_name
@@ -428,15 +499,13 @@ def db_changed(relation_id=None, unit=None, admin=None):
     addr = relation_get('private-address', unit=unit, rid=relation_id)
     password = db_helper.configure_db(addr, db_name, username, admin=admin)
 
-    db_host = get_db_host(addr, interface=relation_type())
+    db_host = get_db_host(addr, interface=relation_name)
 
-    relation_set(relation_id=relation_id,
-                 relation_settings={
-                     'user': username,
-                     'password': password,
-                     'host': db_host,
-                     'database': db_name,
-                 })
+    peer_store_and_set(relation_id=relation_id,
+                       user=username,
+                       password=password,
+                       host=db_host,
+                       database=db_name)
 
 
 def get_db_host(client_hostname, interface='shared-db'):
@@ -532,21 +601,7 @@ def shared_db_changed(relation_id=None, unit=None):
         return
 
     if not is_leader() and client_node_is_ready():
-        # NOTE(jamespage): relation level data candidate
-        log('Service is peered, clearing shared-db relation '
-            'as this service unit is not the leader')
-        relation_clear(relation_id)
-        # Each unit needs to set the db information otherwise if the unit
-        # with the info dies the settings die with it Bug# 1355848
-        if is_relation_made('cluster'):
-            for rel_id in relation_ids('shared-db'):
-                client_settings = \
-                    peer_retrieve_by_prefix(rel_id, exc_list=['hostname'])
-
-                passwords = [key for key in client_settings.keys()
-                             if 'password' in key.lower()]
-                if len(passwords) > 0:
-                    relation_set(relation_id=rel_id, **client_settings)
+        clear_and_populate_client_db_relations(relation_id, 'shared-db')
         return
 
     # Bail if leader is not ready
@@ -725,36 +780,19 @@ def ha_relation_joined(relation_id=None):
 
 @hooks.hook('ha-relation-changed')
 def ha_relation_changed():
-    clustered = relation_get('clustered')
-    if (clustered and is_elected_leader(DC_RESOURCE_NAME)):
-        log('Cluster configured, notifying other services')
-        # Tell all related services to start using the VIP
-        update_shared_db_rels()
-        for r_id in relation_ids('db'):
-            for unit in related_units(r_id):
-                db_changed(r_id, unit, admin=False)
-        for r_id in relation_ids('db-admin'):
-            for unit in related_units(r_id):
-                db_changed(r_id, unit, admin=True)
+    update_client_db_relations()
 
 
 @hooks.hook('leader-settings-changed')
 def leader_settings_changed():
     '''Re-trigger install once leader has seeded passwords into install'''
-    if not is_leader_bootstrapped():
-        log('Leader is not fully bootstrapped, '
-            'skipping leader-setting-changed', level='DEBUG')
-        return
-    install_percona_xtradb_cluster()
-    try:
-        update_bootstrap_uuid()
-    except LeaderNoBootstrapUUIDError:
-        # until the bootstrap-uuid attribute is not replicated cluster_ready()
-        # will evaluate to False, so it is necessary to feed back this info
-        # to the user.
-        status_set('waiting', "Waiting for bootstrap-uuid set by leader")
-
     config_changed()
+
+
+@hooks.hook('leader-elected')
+def leader_elected():
+    '''Set the leader nodes IP'''
+    leader_set(**{'leader-ip': get_relation_ip('cluster')})
 
 
 @hooks.hook('nrpe-external-master-relation-joined',
@@ -787,7 +825,7 @@ def main():
         log('Unknown hook {} - skipping.'.format(e))
     kvstore = kv()
     if not kvstore.get(INITIAL_CLIENT_UPDATE_KEY, False):
-        update_shared_db_rels()
+        update_client_db_relations()
     assess_status(register_configs())
 
 
