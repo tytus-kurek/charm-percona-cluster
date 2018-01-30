@@ -884,7 +884,7 @@ def update_root_password():
         m_helper.connect(user='root', password=new_root_passwd)
         m_helper.execute('select 1;')
     except OperationalError as ex:
-        log("Error connecting using new passowrd: %s" % str(ex), level=DEBUG)
+        log("Error connecting using new password: %s" % str(ex), level=DEBUG)
         log(('Cannot connect using new password, not updating password in '
              'the relation'), level=WARNING)
         return
