@@ -241,6 +241,40 @@ class UtilsTests(unittest.TestCase):
         _wsrep_value.side_effect = [True, 2]
         self.assertTrue(percona_utils.cluster_in_sync())
 
+    @mock.patch("percona_utils.config")
+    def test_get_wsrep_provider_options(self, mock_config):
+        # Empty
+        _config = {"min-cluster-size": 3}
+        mock_config.side_effect = lambda key: _config.get(key)
+        expected = ""
+        self.assertEqual(percona_utils.get_wsrep_provider_options(),
+                         expected)
+
+        # IPv6 only
+        _config = {"prefer-ipv6": True}
+        mock_config.side_effect = lambda key: _config.get(key)
+        expected = "gmcast.listen_addr=tcp://:::4567"
+        self.assertEqual(percona_utils.get_wsrep_provider_options(),
+                         expected)
+        # ipv6 and peer_timeout
+        _config = {"peer-timeout": "PT15S",
+                   "prefer-ipv6": True}
+        mock_config.side_effect = lambda key: _config.get(key)
+        expected = ("gmcast.listen_addr=tcp://:::4567;"
+                    "gmcast.peer_timeout=PT15S")
+        self.assertEqual(percona_utils.get_wsrep_provider_options(),
+                         expected)
+
+        # peer_timeout bad setting
+        _config = {"peer-timeout": "10"}
+        mock_config.side_effect = lambda key: _config.get(key)
+        with self.assertRaises(ValueError):
+            percona_utils.get_wsrep_provider_options()
+        _config = {"peer-timeout": "PT10M"}
+        mock_config.side_effect = lambda key: _config.get(key)
+        with self.assertRaises(ValueError):
+            percona_utils.get_wsrep_provider_options()
+
 
 TO_PATCH = [
     'is_sufficient_peers',

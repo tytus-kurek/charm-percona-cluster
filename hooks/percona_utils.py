@@ -925,3 +925,22 @@ def cluster_wait():
         for rid in relation_ids('cluster'):
             num_nodes += len(related_units(rid))
     distributed_wait(modulo=num_nodes, wait=wait)
+
+
+def get_wsrep_provider_options():
+
+    wsrep_provider_options = []
+
+    if config('prefer-ipv6'):
+        wsrep_provider_options.append('gmcast.listen_addr=tcp://:::4567')
+
+    peer_timeout = config('peer-timeout')
+    if peer_timeout and(not peer_timeout.startswith('PT') or
+                        not peer_timeout.endswith('S')):
+        raise ValueError("Invalid gcast.peer_timeout value: {}"
+                         .format(peer_timeout))
+    elif peer_timeout:
+        wsrep_provider_options.append('gmcast.peer_timeout={}'
+                                      .format(config('peer-timeout')))
+
+    return ';'.join(wsrep_provider_options)

@@ -308,3 +308,13 @@ options:
       collisions. Known wait is the amount of time between one node executing
       an operation and another. On slower hardware this value may need to be
       larger than the default of 30 seconds.
+  peer-timeout:
+    type: string
+    default:
+    description: |
+        This setting sets the gmcast.peer_timeout value. Possible values are documented
+        on the galera cluster site http://galeracluster.com/documentation-webpages/galeraparameters.html
+        For very busy clouds or in resource restricted environments this value can be changed.
+        WARNING Please read all documentation before changing the default value which may have
+        unintended consequences. It may be necessary to set this value higher during deploy time
+        (PTS15) and subsequently change it back to the default (PT3S) after deployment.
