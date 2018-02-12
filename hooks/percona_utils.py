@@ -781,16 +781,15 @@ def cluster_ready():
                         uuids.append(bootstrap_uuid)
 
         if len(uuids) < min_size:
-            log("Fewer than minimum cluster size:{} percona units reporting "
-                "clustered".format(min_size),
+            log("Fewer than minimum cluster size: "
+                "{} percona units reporting clustered".format(min_size),
                 DEBUG)
             return False
         elif len(set(uuids)) > 1:
-            raise Exception("Found inconsistent bootstrap uuids - %s"
-                            "".format((uuids)))
+            raise Exception("Found inconsistent bootstrap uuids: "
+                            "{}".format((uuids)))
         else:
-            log("All {} percona units reporting clustered"
-                "".format(min_size),
+            log("All {} percona units reporting clustered".format(min_size),
                 DEBUG)
             return True
 
