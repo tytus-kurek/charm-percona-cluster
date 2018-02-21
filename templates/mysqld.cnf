@@ -72,6 +72,9 @@ log_bin={{ binlogs_path }}
 expire_logs_days        = {{ binlogs_expire_days }}
 max_binlog_size         = {{ binlogs_max_size }}
 
+# Required to allow trigger creation for openstack services
+log_bin_trust_function_creators = 1
+
 #
 # * InnoDB
 #
