@@ -305,8 +305,11 @@ def upgrade():
             log('Unit is paused, skiping upgrade', level=INFO)
             return
 
-        # Set the Leader's IP
+        # Leader sets on upgrade
         leader_set(**{'leader-ip': get_relation_ip('cluster')})
+        configure_sstuser(sst_password())
+        if not leader_get('root-password') and leader_get('mysql.passwd'):
+            leader_set(**{'root-password': leader_get('mysql.passwd')})
 
         # broadcast the bootstrap-uuid
         wsrep_ready = get_wsrep_value('wsrep_ready') or ""
