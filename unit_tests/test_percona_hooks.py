@@ -1,5 +1,4 @@
 import mock
-import os
 import shutil
 import sys
 import tempfile
@@ -485,6 +484,11 @@ class TestUpgradeCharm(CharmTestCase):
         'config_changed',
         'get_relation_ip',
         'leader_set',
+        'sst_password',
+        'configure_sstuser',
+        'leader_get',
+        'notify_bootstrapped',
+        'mark_seeded',
     ]
 
     def print_log(self, msg, level=None):
@@ -503,19 +507,11 @@ class TestUpgradeCharm(CharmTestCase):
         except:
             pass
 
-    @mock.patch('percona_utils.is_leader')
-    @mock.patch('percona_utils.leader_set')
-    @mock.patch('percona_utils.relation_set')
-    @mock.patch('percona_utils.get_wsrep_value')
-    @mock.patch('percona_utils.relation_ids')
-    @mock.patch('percona_utils.resolve_data_dir')
-    def test_upgrade_charm(self, mock_data_dir, mock_rids, mock_wsrep,
-                           mock_rset, mock_lset, mock_is_leader):
-        mock_rids.return_value = ['cluster:22']
-        mock_is_leader.return_value = True
+    def test_upgrade_charm_leader(self):
         self.is_leader.return_value = True
         self.is_unit_paused_set.return_value = False
         self.get_relation_ip.return_value = '10.10.10.10'
+        self.leader_get.side_effect = [None, 'mypasswd', 'mypasswd']
 
         def c(k):
             values = {'wsrep_ready': 'on',
@@ -523,19 +519,13 @@ class TestUpgradeCharm(CharmTestCase):
             return values[k]
 
         self.get_wsrep_value.side_effect = c
-        mock_wsrep.side_effect = c
-        mock_data_dir.return_value = self.tmpdir
 
         hooks.upgrade()
 
-        seeded_file = os.path.join(self.tmpdir, 'seeded')
-        self.assertTrue(os.path.isfile(seeded_file),
-                        "%s is not file" % seeded_file)
-        with open(seeded_file) as f:
-            self.assertEqual(f.read(), 'done')
+        self.mark_seeded.assert_called_once()
+        self.notify_bootstrapped.assert_called_with(cluster_uuid='1234-abcd')
+        self.configure_sstuser.assert_called_once()
 
-        mock_rset.assert_called_with(relation_id='cluster:22',
-                                     **{'bootstrap-uuid': '1234-abcd'})
-        mock_lset.assert_called_with(**{'bootstrap-uuid': '1234-abcd'})
-
-        self.leader_set.assert_called_with(**{'leader-ip': '10.10.10.10'})
+        self.leader_set.assert_has_calls(
+            [mock.call(**{'leader-ip': '10.10.10.10'}),
+             mock.call(**{'root-password': 'mypasswd'})])
