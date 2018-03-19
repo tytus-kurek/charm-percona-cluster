@@ -131,13 +131,9 @@ innodb_autoinc_lock_mode = {{ innodb_autoinc_lock_mode }}
 wsrep_provider={{ wsrep_provider }}
 
 # Add address of other cluster nodes here
-{% if not clustered and is_leader -%}
-# Empty gcomm address is being used when cluster is getting bootstrapped
-wsrep_cluster_address=gcomm://
-{% else -%}
 # Cluster connection URL contains the IPs of node#1, node#2 and node#3
+# Empty when bootstrapping the cluster
 wsrep_cluster_address=gcomm://{{ cluster_hosts }}
-{% endif %}
 
 #
 # Node address

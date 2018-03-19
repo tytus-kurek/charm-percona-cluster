@@ -1,5 +1,4 @@
 import os
-import unittest
 import sys
 import tempfile
 
@@ -13,9 +12,18 @@ from test_utils import CharmTestCase
 os.environ['JUJU_UNIT_NAME'] = 'percona-cluster/2'
 
 
-class UtilsTests(unittest.TestCase):
+class UtilsTests(CharmTestCase):
+    TO_PATCH = [
+        'config',
+        'log',
+        'relation_ids',
+        'related_units',
+        'relation_get',
+        'relation_set',
+    ]
+
     def setUp(self):
-        super(UtilsTests, self).setUp()
+        super(UtilsTests, self).setUp(percona_utils, self.TO_PATCH)
 
     @mock.patch("percona_utils.log")
     def test_update_empty_hosts_file(self, mock_log):
@@ -92,7 +100,8 @@ class UtilsTests(unittest.TestCase):
         mock_get_cluster_host_ip.return_value = '10.2.0.1'
 
         def _mock_rel_get(*args, **kwargs):
-            return {'private-address': '10.2.0.2'}
+            return {'private-address': '10.2.0.2',
+                    'bootstrap-uuid': 'UUID'}
 
         mock_rel_get.side_effect = _mock_rel_get
         mock_config.side_effect = lambda k: False
@@ -101,7 +110,79 @@ class UtilsTests(unittest.TestCase):
 
         self.assertFalse(mock_update_hosts_file.called)
         mock_rel_get.assert_called_with(rid=1, unit=2)
-        self.assertEqual(hosts, ['10.2.0.1', '10.2.0.2'])
+        self.assertEqual(hosts, ['10.2.0.2'])
+
+    @mock.patch("percona_utils.get_cluster_host_ip")
+    @mock.patch("percona_utils.update_hosts_file")
+    def test_get_cluster_hosts_sorted(self, mock_update_hosts_file,
+                                      mock_get_cluster_host_ip):
+        self.relation_ids.return_value = [1]
+        self.related_units.return_value = [5, 4, 3]
+        mock_get_cluster_host_ip.return_value = '10.2.0.1'
+
+        def _mock_rel_get(*args, **kwargs):
+            unit_id = kwargs.get('unit')
+            # Generate list in reverse sort order
+            return {'private-address': '10.2.0.{}'.format(unit_id - 1),
+                    'bootstrap-uuid': 'UUUID'}
+
+        self.relation_get.side_effect = _mock_rel_get
+        self.config.side_effect = lambda k: False
+
+        hosts = percona_utils.get_cluster_hosts()
+
+        self.assertFalse(mock_update_hosts_file.called)
+        # Verify the IPs are sorted
+        self.assertEqual(hosts, ['10.2.0.2', '10.2.0.3', '10.2.0.4'])
+
+    @mock.patch("percona_utils.get_cluster_host_ip")
+    @mock.patch("percona_utils.update_hosts_file")
+    def test_get_cluster_hosts_none_bootstrapped(self, mock_update_hosts_file,
+                                                 mock_get_cluster_host_ip):
+        self.relation_ids.return_value = [1]
+        self.related_units.return_value = [4, 3, 2]
+        mock_get_cluster_host_ip.return_value = '10.2.0.1'
+
+        def _mock_rel_get(*args, **kwargs):
+            unit_id = kwargs.get('unit')
+            # None set bootstrap-uuid
+            return {'private-address': '10.2.0.{}'.format(unit_id)}
+
+        self.relation_get.side_effect = _mock_rel_get
+        self.config.side_effect = lambda k: False
+
+        hosts = percona_utils.get_cluster_hosts()
+
+        self.assertFalse(mock_update_hosts_file.called)
+        # Verify empty list
+        self.assertEqual(hosts, [])
+
+    @mock.patch("percona_utils.get_cluster_host_ip")
+    @mock.patch("percona_utils.update_hosts_file")
+    def test_get_cluster_hosts_one_not_bootstrapped(self,
+                                                    mock_update_hosts_file,
+                                                    mock_get_cluster_host_ip):
+        self.relation_ids.return_value = [1]
+        self.related_units.return_value = [4, 3, 2]
+        mock_get_cluster_host_ip.return_value = '10.2.0.1'
+
+        def _mock_rel_get(*args, **kwargs):
+            unit_id = kwargs.get('unit')
+            if unit_id == 3:
+                # unit/3 does not set bootstrap-uuid
+                return {'private-address': '10.2.0.{}'.format(unit_id)}
+            else:
+                return {'private-address': '10.2.0.{}'.format(unit_id),
+                        'bootstrap-uuid': 'UUUID'}
+
+        self.relation_get.side_effect = _mock_rel_get
+        self.config.side_effect = lambda k: False
+
+        hosts = percona_utils.get_cluster_hosts()
+
+        self.assertFalse(mock_update_hosts_file.called)
+        # Verify unit/3 not in the list
+        self.assertEqual(hosts, ['10.2.0.2', '10.2.0.4'])
 
     @mock.patch.object(percona_utils, 'socket')
     @mock.patch("percona_utils.get_cluster_host_ip")
@@ -130,7 +211,8 @@ class UtilsTests(unittest.TestCase):
             id = kwargs.get('unit')
             hostname = "host{}".format(host_suffix[id - 1])
             return {'private-address': '10.0.0.{}'.format(id + 1),
-                    'hostname': hostname}
+                    'hostname': hostname,
+                    'bootstrap-uuid': 'UUID'}
 
         config = {'prefer-ipv6': True}
         mock_rel_get.side_effect = _mock_rel_get
@@ -143,7 +225,7 @@ class UtilsTests(unittest.TestCase):
                                                    '10.0.0.3': 'hostC'})
         mock_rel_get.assert_has_calls([mock.call(rid=88, unit=1),
                                        mock.call(rid=88, unit=2)])
-        self.assertEqual(hosts, ['hostA', 'hostB', 'hostC'])
+        self.assertEqual(hosts, ['hostB', 'hostC'])
 
     @mock.patch.object(percona_utils, 'get_address_in_network')
     @mock.patch.object(percona_utils, 'log')
@@ -167,7 +249,8 @@ class UtilsTests(unittest.TestCase):
             hostname = "host{}".format(host_suffix[unit - 1])
             return {'private-address': '10.0.0.{}'.format(unit + 1),
                     'cluster-address': '10.100.0.{}'.format(unit + 1),
-                    'hostname': hostname}
+                    'hostname': hostname,
+                    'bootstrap-uuid': 'UUID'}
 
         config = {'cluster-network': '10.100.0.0/24'}
         mock_rel_get.side_effect = _mock_rel_get
@@ -176,7 +259,7 @@ class UtilsTests(unittest.TestCase):
         hosts = percona_utils.get_cluster_hosts()
         mock_rel_get.assert_has_calls([mock.call(rid=88, unit=1),
                                        mock.call(rid=88, unit=2)])
-        self.assertEqual(hosts, ['10.100.0.1', '10.100.0.2', '10.100.0.3'])
+        self.assertEqual(hosts, ['10.100.0.2', '10.100.0.3'])
 
     @mock.patch.object(percona_utils, 'is_leader')
     @mock.patch.object(percona_utils, 'related_units')
@@ -276,25 +359,25 @@ class UtilsTests(unittest.TestCase):
             percona_utils.get_wsrep_provider_options()
 
 
-TO_PATCH = [
-    'is_sufficient_peers',
-    'is_bootstrapped',
-    'config',
-    'cluster_in_sync',
-    'is_leader',
-    'related_units',
-    'relation_ids',
-    'relation_get',
-    'leader_get',
-    'is_unit_paused_set',
-    'is_clustered',
-    'distributed_wait',
-]
+class UtilsTestsStatus(CharmTestCase):
 
+    TO_PATCH = [
+        'is_sufficient_peers',
+        'is_bootstrapped',
+        'config',
+        'cluster_in_sync',
+        'is_leader',
+        'related_units',
+        'relation_ids',
+        'relation_get',
+        'leader_get',
+        'is_unit_paused_set',
+        'is_clustered',
+        'distributed_wait',
+    ]
 
-class UtilsTestsCTC(CharmTestCase):
     def setUp(self):
-        CharmTestCase.setUp(self, percona_utils, TO_PATCH)
+        super(UtilsTestsStatus, self).setUp(percona_utils, self.TO_PATCH)
 
     def test_single_unit(self):
         self.config.return_value = None
@@ -340,6 +423,27 @@ class UtilsTestsCTC(CharmTestCase):
         self.cluster_in_sync.side_effect = [False, False, True]
         stat, _ = percona_utils.charm_check_func()
         assert stat == 'active'
+
+
+class UtilsTestsCTC(CharmTestCase):
+    TO_PATCH = [
+        'is_sufficient_peers',
+        'config',
+        'cluster_in_sync',
+        'is_leader',
+        'related_units',
+        'relation_ids',
+        'relation_get',
+        'leader_get',
+        'is_unit_paused_set',
+        'is_clustered',
+        'distributed_wait',
+        'clustered_once',
+        'kv'
+    ]
+
+    def setUp(self):
+        super(UtilsTestsCTC, self).setUp(percona_utils, self.TO_PATCH)
 
     @mock.patch.object(percona_utils, 'pxc_installed')
     @mock.patch.object(percona_utils, 'determine_packages')
@@ -400,11 +504,14 @@ class UtilsTestsCTC(CharmTestCase):
             f.assert_called_once_with('assessor', services='s1', ports=None)
 
     @mock.patch.object(percona_utils, 'is_sufficient_peers')
-    def test_cluster_ready(self, mock_is_sufficient_peers):
+    def test_is_bootstrapped(self, mock_is_sufficient_peers):
+        kvstore = mock.MagicMock()
+        kvstore.get.return_value = False
+        self.kv.return_value = kvstore
 
         # Not sufficient number of peers
         mock_is_sufficient_peers.return_value = False
-        self.assertFalse(percona_utils.cluster_ready())
+        self.assertFalse(percona_utils.is_bootstrapped())
 
         # Not all cluster ready
         mock_is_sufficient_peers.return_value = True
@@ -413,7 +520,10 @@ class UtilsTestsCTC(CharmTestCase):
         self.relation_get.return_value = False
         _config = {'min-cluster-size': 3}
         self.config.side_effect = lambda key: _config.get(key)
-        self.assertFalse(percona_utils.cluster_ready())
+        self.assertFalse(percona_utils.is_bootstrapped())
+
+        # kvstore.set has not been called with incomplete clusters
+        kvstore.set.assert_not_called()
 
         # All cluster ready
         mock_is_sufficient_peers.return_value = True
@@ -422,7 +532,13 @@ class UtilsTestsCTC(CharmTestCase):
         self.relation_get.return_value = 'UUID'
         _config = {'min-cluster-size': 3}
         self.config.side_effect = lambda key: _config.get(key)
-        self.assertTrue(percona_utils.cluster_ready())
+        self.assertTrue(percona_utils.is_bootstrapped())
+        kvstore.set.assert_called_once_with(key='initial-cluster-complete',
+                                            value=True)
+
+        # Now set the key for clustered at least once
+        kvstore.get.return_value = True
+        kvstore.set.reset_mock()
 
         # Not all cluster ready no min-cluster-size
         mock_is_sufficient_peers.return_value = True
@@ -431,7 +547,8 @@ class UtilsTestsCTC(CharmTestCase):
         self.relation_get.return_value = False
         _config = {'min-cluster-size': None}
         self.config.side_effect = lambda key: _config.get(key)
-        self.assertFalse(percona_utils.cluster_ready())
+        self.assertFalse(percona_utils.is_bootstrapped())
+        kvstore.set.assert_not_called()
 
         # All cluster ready no min-cluster-size
         mock_is_sufficient_peers.return_value = True
@@ -440,7 +557,7 @@ class UtilsTestsCTC(CharmTestCase):
         self.relation_get.return_value = 'UUID'
         _config = {'min-cluster-size': None}
         self.config.side_effect = lambda key: _config.get(key)
-        self.assertTrue(percona_utils.cluster_ready())
+        self.assertTrue(percona_utils.is_bootstrapped())
 
         # Assume single unit no-min-cluster-size
         mock_is_sufficient_peers.return_value = True
@@ -449,13 +566,12 @@ class UtilsTestsCTC(CharmTestCase):
         self.relation_get.return_value = None
         _config = {'min-cluster-size': None}
         self.config.side_effect = lambda key: _config.get(key)
-        self.assertTrue(percona_utils.cluster_ready())
+        self.assertTrue(percona_utils.is_bootstrapped())
 
+    @mock.patch.object(percona_utils, 'is_bootstrapped')
+    def test_cluster_ready(self, mock_is_bootstrapped):
         # When VIP configured check is_clustered
-        mock_is_sufficient_peers.return_value = True
-        self.relation_ids.return_value = ['cluster:0']
-        self.related_units.return_value = ['test/0', 'test/1']
-        self.relation_get.return_value = 'UUID'
+        mock_is_bootstrapped.return_value = True
         _config = {'vip': '10.10.10.10', 'min-cluster-size': 3}
         self.config.side_effect = lambda key: _config.get(key)
         # HACluster not ready
@@ -545,8 +661,8 @@ class TestResolveHostnameToIP(CharmTestCase):
     TO_PATCH = []
 
     def setUp(self):
-        CharmTestCase.setUp(self, percona_utils,
-                            self.TO_PATCH)
+        super(TestResolveHostnameToIP, self).setUp(percona_utils,
+                                                   self.TO_PATCH)
 
     @mock.patch.object(percona_utils, 'is_ipv6')
     @mock.patch.object(percona_utils, 'is_ip')
@@ -625,7 +741,8 @@ class TestUpdateBootstrapUUID(CharmTestCase):
     ]
 
     def setUp(self):
-        CharmTestCase.setUp(self, percona_utils, self.TO_PATCH)
+        super(TestUpdateBootstrapUUID, self).setUp(percona_utils,
+                                                   self.TO_PATCH)
         self.log.side_effect = self.juju_log
 
     def juju_log(self, msg, level=None):

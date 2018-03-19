@@ -292,6 +292,7 @@ class TestConfigChanged(CharmTestCase):
         'get_cluster_hosts',
         'is_leader_bootstrapped',
         'is_bootstrapped',
+        'clustered_once',
         'is_leader',
         'render_config_restart_on_changed',
         'update_client_db_relations',
@@ -315,6 +316,7 @@ class TestConfigChanged(CharmTestCase):
         self.is_leader.return_value = False
         self.is_leader_bootstrapped.return_value = False
         self.is_bootstrapped.return_value = False
+        self.clustered_once.return_value = False
         self.relation_ids.return_value = []
         self.is_relation_made.return_value = False
         self.leader_get.return_value = '10.10.10.10'
@@ -322,6 +324,7 @@ class TestConfigChanged(CharmTestCase):
 
     def test_config_changed_open_port(self):
         '''Ensure open_port is called with MySQL default port'''
+        self.is_leader_bootstrapped.return_value = True
         hooks.config_changed()
         self.open_port.assert_called_with(3306)
 
@@ -329,93 +332,123 @@ class TestConfigChanged(CharmTestCase):
         '''Ensure configuration is only rendered when ready for the leader'''
         self.is_leader.return_value = True
 
-        # Render without hosts
+        # Render without peers, leader not bootsrapped
+        self.get_cluster_hosts.return_value = []
         hooks.config_changed()
-        self.install_percona_xtradb_cluster.assert_called_once_with()
+        self.install_percona_xtradb_cluster.assert_called_once()
         self.render_config_restart_on_changed.assert_called_once_with(
-            False, [], bootstrap=True)
+            [], bootstrap=True)
 
-        # Render with hosts, not bootstrapped
-        # NOTE: It is unclear this scenario could occur.
-        # We may need to preclude it from occuring.
-        self.is_leader_bootstrapped.return_value = False
-        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30']
-        self.is_bootstrapped.return_value = True
-
+        # Render without peers, leader bootstrapped
+        self.is_leader_bootstrapped.return_value = True
+        self.get_cluster_hosts.return_value = []
         self.render_config_restart_on_changed.reset_mock()
         hooks.config_changed()
         self.render_config_restart_on_changed.assert_called_once_with(
-            True, ['10.10.10.20', '10.10.10.30'], bootstrap=True)
+            [], bootstrap=False)
 
-        # Render with hosts, bootstrapped
+        # Render without hosts, leader bootstrapped, never clustered
         self.is_leader_bootstrapped.return_value = True
         self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30']
-        self.is_bootstrapped.return_value = True
 
         self.render_config_restart_on_changed.reset_mock()
         hooks.config_changed()
         self.render_config_restart_on_changed.assert_called_once_with(
-            True, ['10.10.10.20', '10.10.10.30'], bootstrap=False)
+            [], bootstrap=False)
+
+        # Clustered at least once
+        self.clustered_once.return_value = True
+
+        # Render with hosts, leader bootstrapped
+        self.is_leader_bootstrapped.return_value = True
+        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30']
+
+        self.render_config_restart_on_changed.reset_mock()
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            ['10.10.10.20', '10.10.10.30'], bootstrap=False)
+
+        # In none of the prior scenarios should update_root_password have been
+        # called.
+        self.update_root_password.assert_not_called()
+
+        # Render with hosts, leader and cluster bootstrapped
+        self.is_leader_bootstrapped.return_value = True
+        self.is_bootstrapped.return_value = True
+        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30']
+
+        self.render_config_restart_on_changed.reset_mock()
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            ['10.10.10.20', '10.10.10.30'], bootstrap=False)
+        self.update_root_password.assert_called_once()
 
     def test_config_changed_render_non_leader(self):
         '''Ensure configuration is only rendered when ready for
         non-leaders'''
 
+        # Avoid rendering for non-leader.
+        # Bug #1738896
+        # Leader not bootstrapped
         # Do not render
+        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30',
+                                               '10.10.10.10']
+        self.is_leader_bootstrapped.return_value = False
         hooks.config_changed()
         self.install_percona_xtradb_cluster.assert_called_once_with()
         self.render_config_restart_on_changed.assert_not_called()
+        self.update_bootstrap_uuid.assert_not_called()
 
-        # Bug #1738896
-        # Avoid clusterend = False and rendering for non-leader.
-        # This should no longer be possible in the code. Thus the test.
-        # Instead use the leader.
+        # Leader is bootstrapped, no peers
+        # Use the leader node and render.
         self.is_leader_bootstrapped.return_value = True
+        self.get_cluster_hosts.return_value = []
 
         self.render_config_restart_on_changed.reset_mock()
         hooks.config_changed()
         self.render_config_restart_on_changed.assert_called_once_with(
-            True, ['10.10.10.10'])
+            ['10.10.10.10'])
 
+        # Missing leader, leader bootstrapped
         # Bug #1738896
-        # Avoid clustered = Flase,  bootstrapped = True
-        # and rendering for non-leader.
-        # This should no longer be possible in the code. Thus the test.
-        # Instead use the leader.
-        self.is_leader_bootstrapped.return_value = True
-        self.is_bootstrapped.return_value = True
-
+        # Leader bootstrapped
+        # Add the leader node and render.
         self.render_config_restart_on_changed.reset_mock()
-        hooks.config_changed()
-        self.render_config_restart_on_changed.assert_called_once_with(
-            True, ['10.10.10.10'])
-
-        # Just one host, bootstrapped
-        self.render_config_restart_on_changed.reset_mock()
-        self.get_cluster_hosts.return_value = ['10.10.10.20']
-
-        hooks.config_changed()
-        self.render_config_restart_on_changed.assert_called_once_with(
-            True, ['10.10.10.10'])
-
-        # Missing leader, bootstrapped
-        self.render_config_restart_on_changed.reset_mock()
-        self.is_bootstrapped.return_value = True
+        self.update_bootstrap_uuid.reset_mock()
         self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30']
 
         hooks.config_changed()
         self.render_config_restart_on_changed.assert_called_once_with(
-            True, ['10.10.10.10', '10.10.10.20', '10.10.10.30'])
+            ['10.10.10.10', '10.10.10.20', '10.10.10.30'])
+        self.update_bootstrap_uuid.assert_called_once()
 
-        # Leader present, bootstrapped
+        # Leader present, leader bootstrapped
         self.render_config_restart_on_changed.reset_mock()
-        self.is_bootstrapped.return_value = True
+        self.update_bootstrap_uuid.reset_mock()
         self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30',
                                                '10.10.10.10']
 
         hooks.config_changed()
         self.render_config_restart_on_changed.assert_called_once_with(
-            True, ['10.10.10.20', '10.10.10.30', '10.10.10.10'])
+            ['10.10.10.20', '10.10.10.30', '10.10.10.10'])
+        self.update_bootstrap_uuid.assert_called_once()
+
+        # In none of the prior scenarios should update_root_password have been
+        # called. is_bootstrapped was defaulted to False
+        self.update_root_password.assert_not_called()
+
+        # Leader present, leader bootstrapped, cluster bootstrapped
+        self.is_bootstrapped.return_value = True
+        self.render_config_restart_on_changed.reset_mock()
+        self.update_bootstrap_uuid.reset_mock()
+        self.get_cluster_hosts.return_value = ['10.10.10.20', '10.10.10.30',
+                                               '10.10.10.10']
+
+        hooks.config_changed()
+        self.render_config_restart_on_changed.assert_called_once_with(
+            ['10.10.10.20', '10.10.10.30', '10.10.10.10'])
+        self.update_bootstrap_uuid.assert_called_once()
+        self.update_root_password.assert_called_once()
 
 
 class TestInstallPerconaXtraDB(CharmTestCase):

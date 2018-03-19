@@ -9,4 +9,5 @@ __pycache__
 .testrepository
 .tox
 .stestr
+.unit-state.db
 func-results.json

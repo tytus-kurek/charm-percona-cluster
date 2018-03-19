@@ -39,6 +39,7 @@ from charmhelpers.core.hookenv import (
     leader_get,
     leader_set,
 )
+from charmhelpers.core.unitdata import kv
 from charmhelpers.fetch import (
     apt_install,
     filter_installed_packages,
@@ -76,6 +77,7 @@ deb-src http://repo.percona.com/apt {release} main"""
 SEEDED_MARKER = "{data_dir}/seeded"
 HOSTS_FILE = '/etc/hosts'
 DEFAULT_MYSQL_PORT = 3306
+INITIAL_CLUSTERED_KEY = 'initial-cluster-complete'
 
 # NOTE(ajkavanagh) - this is 'required' for the pause/resume code for
 # maintenance mode, but is currently not populated as the
@@ -217,6 +219,20 @@ def is_sufficient_peers():
 
 
 def get_cluster_hosts():
+    """Get the bootstrapped cluster peers
+
+    Determine the cluster peers that have bootstrapped and return the list
+    hosts. Secondarily, update the hosts file with IPv6 address name
+    resolution.
+
+    The returned host list is intended to be used in the
+    wsrep_cluster_address=gcomm:// setting. Therefore, the hosts must have
+    already been bootstrapped. If an un-bootstrapped host happens to be first
+    in the list, mysql will fail to start.
+
+    @side_effect update_hosts_file called for IPv6 hostname resolution
+    @returns list of hosts
+    """
     hosts_map = {}
 
     local_cluster_address = get_cluster_host_ip()
@@ -227,7 +243,7 @@ def get_cluster_hosts():
         addr = get_ipv6_addr(exc_list=[config('vip')], fatal=True)[0]
         hosts_map = {addr: socket.gethostname()}
 
-    hosts = [local_cluster_address]
+    hosts = []
     for relid in relation_ids('cluster'):
         for unit in related_units(relid):
             rdata = relation_get(unit=unit, rid=relid)
@@ -247,13 +263,26 @@ def get_cluster_hosts():
                         level=DEBUG)
 
                 hosts_map[cluster_address] = hostname
-                hosts.append(hostname)
+                host = hostname
             else:
-                hosts.append(resolve_hostname_to_ip(cluster_address))
+                host = resolve_hostname_to_ip(cluster_address)
+            # Add only cluster peers who have set bootstrap-uuid
+            # An indiction they themselves are bootstrapped.
+            # Un-bootstrapped hosts in gcom lead mysql to fail to start
+            # if it happens to be the first address in the list
+            # Also fix strange bug when executed from actions where the local
+            # unit is returned in related_units. We do not want the local IP
+            # in the gcom hosts list.
+            if (rdata.get('bootstrap-uuid') and
+                    host not in hosts and
+                    host != local_cluster_address):
+                hosts.append(host)
 
     if hosts_map:
         update_hosts_file(hosts_map)
 
+    # Return a sorted list to avoid uneccessary restarts
+    hosts.sort()
     return hosts
 
 
@@ -443,28 +472,83 @@ def is_leader_bootstrapped():
     return True
 
 
-def is_bootstrapped():
-    """ Check that this unit is bootstrapped
+def clustered_once():
+    """Determine if the cluster has ever bootstrapped completely
+
+    Check unittest.kv if the cluster has bootstrapped at least once.
 
     @returns boolean
     """
-    uuids = []
-    rids = relation_ids('cluster') or []
-    for rid in rids:
-        units = related_units(rid)
-        units.append(local_unit())
-        for unit in units:
-            id = relation_get('bootstrap-uuid', unit=unit, rid=rid)
-            if id:
-                uuids.append(id)
 
-    if uuids:
-        if len(set(uuids)) > 1:
-            log("Found inconsistent bootstrap uuids - %s" % (uuids), WARNING)
+    # Run is_bootstrapped once to guarantee kvstore is up to date
+    is_bootstrapped()
+    kvstore = kv()
+    return kvstore.get(INITIAL_CLUSTERED_KEY, False)
 
-        return True
 
-    return False
+def is_bootstrapped():
+    """Determine if each node in the cluster has been bootstrapped and the
+    cluster is complete with the expected number of peers.
+
+    Check that each node in the cluster, including this one, has set
+    bootstrap-uuid on the cluster relation.
+
+    Having min-cluster-size set will guarantee is_bootstrapped will not
+    return True until the expected number of peers are bootstrapped. If
+    min-cluster-size is not set, it will check peer relations to estimate the
+    expected cluster size. If min-cluster-size is not set and there are no
+    peers it must assume the cluster is bootstrapped in order to allow for
+    single unit deployments.
+
+    @returns boolean
+    """
+    min_size = config('min-cluster-size')
+    if not min_size:
+        units = 1
+        for relation_id in relation_ids('cluster'):
+            units += len(related_units(relation_id))
+        min_size = units
+
+    if not is_sufficient_peers():
+        return False
+    elif min_size > 1:
+        uuids = []
+        for relation_id in relation_ids('cluster'):
+            units = related_units(relation_id) or []
+            units.append(local_unit())
+            for unit in units:
+                if not relation_get(attribute='bootstrap-uuid',
+                                    rid=relation_id,
+                                    unit=unit):
+                    log("{} is not yet clustered".format(unit),
+                        DEBUG)
+                    return False
+                else:
+                    bootstrap_uuid = relation_get(attribute='bootstrap-uuid',
+                                                  rid=relation_id,
+                                                  unit=unit)
+                    if bootstrap_uuid:
+                        uuids.append(bootstrap_uuid)
+
+        if len(uuids) < min_size:
+            log("Fewer than minimum cluster size: "
+                "{} percona units reporting clustered".format(min_size),
+                DEBUG)
+            return False
+        elif len(set(uuids)) > 1:
+            raise Exception("Found inconsistent bootstrap uuids: "
+                            "{}".format((uuids)))
+        else:
+            log("All {} percona units reporting clustered".format(min_size),
+                DEBUG)
+
+    # Set INITIAL_CLUSTERED_KEY as the cluster has fully bootstrapped
+    kvstore = kv()
+    if not kvstore.get(INITIAL_CLUSTERED_KEY, False):
+        kvstore.set(key=INITIAL_CLUSTERED_KEY, value=True)
+        kvstore.flush()
+
+    return True
 
 
 def bootstrap_pxc():
@@ -606,12 +690,14 @@ def charm_check_func():
         # and has the required peers
         if not is_bootstrapped():
             return ('waiting', 'Unit waiting for cluster bootstrap')
-        elif is_bootstrapped():
+        elif cluster_ready():
             try:
                 _cluster_in_sync()
                 return ('active', 'Unit is ready and clustered')
             except DesyncedException:
                 return ('blocked', 'Unit is not in sync')
+        else:
+            return ('waiting', 'Unit waiting on hacluster relation')
     else:
         return ('active', 'Unit is ready')
 
@@ -763,15 +849,14 @@ def get_cluster_host_ip():
 
 
 def cluster_ready():
-    """Determine if each node in the cluster is ready and the cluster is
-    complete with the expected number of peers.
+    """Determine if each node in the cluster is ready to respond to client
+    requests.
 
     Once cluster_ready returns True it is safe to execute client relation
-    hooks. Having min-cluster-size set will guarantee cluster_ready will not
-    return True until the expected number of peers are clustered and ready.
+    hooks.
 
-    If min-cluster-size is not set it must assume the cluster is ready in order
-    to allow for single unit deployments.
+    If a VIP is set do not return ready until hacluster relationship is
+    complete.
 
     @returns boolean
     """
@@ -780,49 +865,7 @@ def cluster_ready():
             DEBUG)
         return False
 
-    min_size = config('min-cluster-size')
-    units = 1
-    for relation_id in relation_ids('cluster'):
-        units += len(related_units(relation_id))
-    if not min_size:
-        min_size = units
-
-    if not is_sufficient_peers():
-        return False
-    elif min_size > 1:
-        uuids = []
-        for relation_id in relation_ids('cluster'):
-            units = related_units(relation_id) or []
-            units.append(local_unit())
-            for unit in units:
-                if not relation_get(attribute='bootstrap-uuid',
-                                    rid=relation_id,
-                                    unit=unit):
-                    log("{} is not yet clustered".format(unit),
-                        DEBUG)
-                    return False
-                else:
-                    bootstrap_uuid = relation_get(attribute='bootstrap-uuid',
-                                                  rid=relation_id,
-                                                  unit=unit)
-                    if bootstrap_uuid:
-                        uuids.append(bootstrap_uuid)
-
-        if len(uuids) < min_size:
-            log("Fewer than minimum cluster size: "
-                "{} percona units reporting clustered".format(min_size),
-                DEBUG)
-            return False
-        elif len(set(uuids)) > 1:
-            raise Exception("Found inconsistent bootstrap uuids: "
-                            "{}".format((uuids)))
-        else:
-            log("All {} percona units reporting clustered".format(min_size),
-                DEBUG)
-            return True
-
-    log("Must assume this is a single unit returning 'cluster' ready", DEBUG)
-    return True
+    return is_bootstrapped()
 
 
 def client_node_is_ready():

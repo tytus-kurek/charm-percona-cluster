@@ -317,4 +317,4 @@ options:
         For very busy clouds or in resource restricted environments this value can be changed.
         WARNING Please read all documentation before changing the default value which may have
         unintended consequences. It may be necessary to set this value higher during deploy time
-        (PTS15) and subsequently change it back to the default (PT3S) after deployment.
+        (PT15S) and subsequently change it back to the default (PT3S) after deployment.

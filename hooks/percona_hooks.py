@@ -4,7 +4,6 @@ import sys
 import json
 import os
 import socket
-import time
 
 from charmhelpers.core.hookenv import (
     Hooks, UnregisteredHookError,
@@ -12,7 +11,6 @@ from charmhelpers.core.hookenv import (
     log,
     relation_get,
     relation_set,
-    relation_id,
     relation_ids,
     related_units,
     unit_get,
@@ -32,8 +30,8 @@ from charmhelpers.core.hookenv import (
 )
 from charmhelpers.core.host import (
     service_restart,
-    service_start,
     service_running,
+    service_stop,
     file_hash,
     lsb_release,
     CompareHostReleases,
@@ -91,6 +89,8 @@ from percona_utils import (
     install_mysql_ocf,
     notify_bootstrapped,
     is_bootstrapped,
+    clustered_once,
+    INITIAL_CLUSTERED_KEY,
     is_leader_bootstrapped,
     get_wsrep_value,
     assess_status,
@@ -168,7 +168,7 @@ def install():
     install_percona_xtradb_cluster()
 
 
-def render_config(clustered=False, hosts=None):
+def render_config(hosts=None):
     if hosts is None:
         hosts = []
 
@@ -179,7 +179,6 @@ def render_config(clustered=False, hosts=None):
     context = {
         'cluster_name': 'juju_cluster',
         'private_address': get_cluster_host_ip(),
-        'clustered': clustered,
         'cluster_hosts': ",".join(hosts),
         'sst_method': config('sst-method'),
         'sst_password': sst_password(),
@@ -223,7 +222,7 @@ def render_config(clustered=False, hosts=None):
     render(os.path.basename(config_file), config_file, context, perms=0o444)
 
 
-def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
+def render_config_restart_on_changed(hosts, bootstrap=False):
     """Render mysql config and restart mysql service if file changes as a
     result.
 
@@ -235,13 +234,9 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
     it is started so long as the new node to be added is guaranteed to have
     been restarted so as to apply the new config.
     """
-    if not is_leader() and not is_bootstrapped():
-        log('Non-leader waiting on leader bootstrap, skipping render',
-            DEBUG)
-        return
     config_file = resolve_cnf_file()
     pre_hash = file_hash(config_file)
-    render_config(clustered, hosts)
+    render_config(hosts)
     create_binlogs_directory()
     update_db_rels = False
     if file_hash(config_file) != pre_hash or bootstrap:
@@ -251,37 +246,28 @@ def render_config_restart_on_changed(clustered, hosts, bootstrap=False):
             # relation id exists yet.
             notify_bootstrapped()
             update_db_rels = True
-        elif not service_running('mysql@bootstrap'):
+        else:
             # NOTE(jamespage):
             # if mysql@bootstrap is running, then the native
             # bootstrap systemd service was used to start this
             # instance, and it was the initial seed unit
-            # so don't try start the mysql.service unit;
-            # this also deals with seed units after they have been
-            # rebooted and mysqld was started by mysql.service.
-            delay = 1
+            # stop the bootstap version before restarting normal mysqld
+            if service_running('mysql@bootstrap'):
+                service_stop('mysql@bootstrap')
+
             attempts = 0
             max_retries = 5
-            # NOTE(dosaboy): avoid unnecessary restarts. Once mysql is started
-            # it needn't be restarted when new units join the cluster since the
-            # new units will join and apply their own config.
-            if not seeded():
-                action = service_restart
-                # If we are restarting avoid simultaneous restart collisions
-                cluster_wait()
-            else:
-                action = service_start
 
-            while not action('mysql'):
+            cluster_wait()
+            while not service_restart('mysql'):
                 if attempts == max_retries:
                     raise Exception("Failed to start mysql (max retries "
                                     "reached)")
 
-                log("Failed to start mysql - retrying in %ss" % (delay),
+                log("Failed to start mysql - retrying per distributed wait",
                     WARNING)
-                time.sleep(delay)
-                delay += 2
                 attempts += 1
+                cluster_wait()
 
         # If we get here we assume prior actions have succeeded to always
         # this unit is marked as seeded so that subsequent calls don't result
@@ -330,6 +316,13 @@ def upgrade():
         if not leader_get('root-password') and leader_get('mysql.passwd'):
             leader_set(**{'root-password': leader_get('mysql.passwd')})
 
+        # On upgrade-charm we assume the cluster was complete at some point
+        kvstore = kv()
+        initial_clustered = kvstore.get(INITIAL_CLUSTERED_KEY, False)
+        if not initial_clustered:
+            kvstore.set(key=INITIAL_CLUSTERED_KEY, value=True)
+            kvstore.flush()
+
         # broadcast the bootstrap-uuid
         wsrep_ready = get_wsrep_value('wsrep_ready') or ""
         if wsrep_ready.lower() in ['on', 'ready']:
@@ -368,47 +361,44 @@ def config_changed():
         assert_charm_supports_ipv6()
 
     hosts = get_cluster_hosts()
-    clustered = len(hosts) > 1
-    bootstrapped = is_bootstrapped()
     leader_bootstrapped = is_leader_bootstrapped()
     leader_ip = leader_get('leader-ip')
 
-    # Handle Edge Cases
-    if not is_leader():
-        # Fix Bug #1738896
-        # Speed up cluster process
-        if not clustered and leader_bootstrapped:
-            clustered = True
-            bootstrapped = True
-            hosts = [leader_ip]
-        # Fix gcomm timeout to non-bootstrapped node
-        if hosts and leader_ip not in hosts:
-            hosts = [leader_ip] + hosts
-
-    # NOTE: only configure the cluster if we have sufficient peers. This only
-    # applies if min-cluster-size is provided and is used to avoid extraneous
-    # configuration changes and premature bootstrapping as the cluster is
-    # deployed.
     if is_leader():
+        # If the cluster has not been fully bootstrapped once yet, use an empty
+        # hosts list to avoid restarting the leader node's mysqld during
+        # cluster buildup.
+        # After, the cluster has bootstrapped at least one time, it is much
+        # less likely to have restart collisions. It is then safe to use the
+        # full hosts list and have the leader node's mysqld restart.
+        if not clustered_once():
+            hosts = []
         log("Leader unit - bootstrap required=%s" % (not leader_bootstrapped),
             DEBUG)
-        render_config_restart_on_changed(clustered, hosts,
+        render_config_restart_on_changed(hosts,
                                          bootstrap=not leader_bootstrapped)
-    elif bootstrapped:
-        log("Cluster is bootstrapped - configuring mysql on this node",
+    elif leader_bootstrapped:
+        # Speed up cluster process by bootstrapping when the leader has
+        # bootstrapped
+        if leader_ip not in hosts:
+            # Fix Bug #1738896
+            hosts = [leader_ip] + hosts
+        log("Leader is bootstrapped - configuring mysql on this node",
             DEBUG)
-        render_config_restart_on_changed(clustered, hosts)
+        # Rendering the mysqld.cnf and restarting is bootstrapping for a
+        # non-leader node.
+        render_config_restart_on_changed(hosts)
+        # Assert we are bootstrapped. This will throw an
+        # InconsistentUUIDError exception if UUIDs do not match.
+        update_bootstrap_uuid()
     else:
-        log("Not configuring", DEBUG)
-
-    if bootstrapped:
-        try:
-            update_bootstrap_uuid()
-        except LeaderNoBootstrapUUIDError:
-            # until the bootstrap-uuid attribute is not replicated
-            # cluster_ready() will evaluate to False, so it is necessary to
-            # feed back this info to the user.
-            status_set('waiting', "Waiting for bootstrap-uuid set by leader")
+        # Until the bootstrap-uuid attribute is set by the leader,
+        # cluster_ready() will evaluate to False. So it is necessary to
+        # feed this information to the user.
+        status_set('waiting', "Waiting for bootstrap-uuid set by leader")
+        log('Non-leader waiting on leader bootstrap, skipping render',
+            DEBUG)
+        return
 
     # Notify any changes to the access network
     update_client_db_relations()
@@ -427,7 +417,7 @@ def config_changed():
 
     # the password needs to be updated only if the node was already
     # bootstrapped
-    if bootstrapped:
+    if is_bootstrapped():
         update_root_password()
 
 
@@ -445,12 +435,6 @@ def cluster_joined():
     log("Setting cluster relation: '%s'" % (relation_settings),
         level=INFO)
     relation_set(relation_settings=relation_settings)
-
-    # Ensure all new peers are aware
-    cluster_state_uuid = leader_get('bootstrap-uuid')
-    if cluster_state_uuid:
-        notify_bootstrapped(cluster_rid=relation_id(),
-                            cluster_uuid=cluster_state_uuid)
 
 
 @hooks.hook('cluster-relation-departed')

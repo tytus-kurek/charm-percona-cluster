@@ -12,7 +12,6 @@ from charmhelpers.contrib.openstack.amulet.deployment import (
 )
 from charmhelpers.contrib.amulet.utils import AmuletUtils
 
-
 PXC_ROOT_PASSWD = 'ubuntu'
 
 
@@ -107,6 +106,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
         self.test_pxc_running()
         self.test_bootstrapped_and_clustered()
         self.test_bootstrap_uuid_set_in_the_relation()
+        self.test_restart_on_config_change()
         self.test_pause_resume()
         if self.ha:
             self.test_kill_master()
@@ -192,6 +192,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
 
         action_id = self.utils.run_action(unit, "pause")
         assert self.utils.wait_on_action(action_id), "Pause action failed."
+        self.d.sentry.wait()
 
         # Note that is_mysqld_running will print an error message when
         # mysqld is not running.  This is by design but it looks odd
@@ -206,6 +207,7 @@ class BasicDeployment(OpenStackAmuletDeployment):
         assert self.utils.status_get(unit)[0] == "active"
         assert self.is_mysqld_running(unit=unit), \
             "mysqld not running after resume."
+        self._auto_wait_for_status()
 
     def test_kill_master(self):
         '''
@@ -349,3 +351,51 @@ class BasicDeployment(OpenStackAmuletDeployment):
                                " to %s:%s" % (addr,
                                               port))
             return False
+
+    def resolve_cnf_file(self):
+        if self._get_openstack_release() < self.xenial_mitaka:
+            return '/etc/mysql/my.cnf'
+        else:
+            return '/etc/mysql/percona-xtradb-cluster.conf.d/mysqld.cnf'
+
+    def test_restart_on_config_change(self):
+        """Verify that the specified services are restarted when the
+        config is changed."""
+
+        sentry = self.d.sentry['percona-cluster'][0]
+        juju_service = 'percona-cluster'
+
+        # Expected default and alternate values
+        set_default = {'peer-timeout': 'PT3S'}
+        set_alternate = {'peer-timeout': 'PT15S'}
+
+        # Config file affected by juju set config change
+        conf_file = self.resolve_cnf_file()
+
+        # Services which are expected to restart upon config change
+        services = {
+            'mysqld': conf_file,
+        }
+
+        # Make config change, check for service restarts
+        self.utils.log.debug('Making config change on {}...'
+                             .format(juju_service))
+        mtime = self.utils.get_sentry_time(sentry)
+        self.d.configure(juju_service, set_alternate)
+        self._auto_wait_for_status()
+
+        sleep_time = 40
+        for s, conf_file in services.iteritems():
+            self.utils.log.debug("Checking that service restarted: {}"
+                                 .format(s))
+            if not self.utils.validate_service_config_changed(
+                    sentry, mtime, s, conf_file, retry_count=5,
+                    retry_sleep_time=sleep_time,
+                    sleep_time=sleep_time):
+                self.d.configure(juju_service, set_default)
+                msg = "service {} didn't restart after config change".format(s)
+                amulet.raise_status(amulet.FAIL, msg=msg)
+            sleep_time = 0
+
+        self.d.configure(juju_service, set_default)
+        self._auto_wait_for_status()

@@ -3,4 +3,5 @@ destination: tests/charmhelpers
 include:
     - contrib.amulet
     - contrib.openstack.amulet
-    - core.hookenv
+    - core
+    - osplatform
