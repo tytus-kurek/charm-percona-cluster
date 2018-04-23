@@ -119,12 +119,15 @@ environments. MAAS 2.0 requires Juju 2.0 or greater. The clustered nodes must
 have static or "reserved" IP addresses registered in MAAS. The DNS hostname(s)
 must be pre-registered in MAAS before use with DNS HA.
 
-At a minimum, the config option 'dns-ha' must be set to true and
-'os-access-hostname' must be set in order to use DNS HA.
+At a minimum, the config option 'dns-ha' must be set to true, the
+'os-access-hostname' must be set, and the 'access' binding must be
+defined in order to use DNS HA.
+
 The charm will throw an exception in the following circumstances:
 If neither 'vip' nor 'dns-ha' is set and the charm is related to hacluster
-If both 'vip' and 'dns-ha' are set as they are mutually exclusive
-If 'dns-ha' is set and os-access-hostname is not set
+If both 'vip' and 'dns-ha' are set, as they are mutually exclusive
+If 'dns-ha' is set and 'os-access-hostname' is not set
+If the 'access' binding is not set and 'dns-ha' is set, consumers of the db may not be allowed to connect
 
 Network Space support
 ---------------------
@@ -156,7 +159,7 @@ MySQL databases services from other charms.
 
 **NOTE:** Existing deployments using the access-network configuration option will continue to function; this option is preferred over any network space binding provided for the 'shared-db' relation if set.
 
-Limitiations
+Limitations
 ============
 
 Note that Percona XtraDB Cluster is not a 'scale-out' MySQL solution; reads
