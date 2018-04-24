@@ -206,13 +206,13 @@ class UtilsTests(unittest.TestCase):
     def test_packages_eq_wily(self, mock_lsb_release):
         mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'wily'}
         self.assertEqual(percona_utils.determine_packages(),
-                         ['percona-xtradb-cluster-server-5.6'])
+                         ['percona-xtradb-cluster-server'])
 
     @mock.patch.object(percona_utils, 'lsb_release')
     def test_packages_gt_wily(self, mock_lsb_release):
         mock_lsb_release.return_value = {'DISTRIB_CODENAME': 'xenial'}
         self.assertEqual(percona_utils.determine_packages(),
-                         ['percona-xtradb-cluster-server-5.6'])
+                         ['percona-xtradb-cluster-server'])
 
     @mock.patch.object(percona_utils, 'lsb_release')
     def test_packages_lt_wily(self, mock_lsb_release):
@@ -363,19 +363,20 @@ class UtilsTestsCTC(CharmTestCase):
             )
             application_version_set.assert_called_with('5.6.17')
 
-    @mock.patch.object(percona_utils, 'REQUIRED_INTERFACES')
     @mock.patch.object(percona_utils, 'services')
+    @mock.patch.object(percona_utils, 'REQUIRED_INTERFACES')
     @mock.patch.object(percona_utils, 'make_assess_status_func')
     def test_assess_status_func(self,
                                 make_assess_status_func,
-                                services,
-                                REQUIRED_INTERFACES):
-        services.return_value = 's1'
+                                REQUIRED_INTERFACES,
+                                services):
+        services.return_value = ['mysql']
         percona_utils.assess_status_func('test-config')
         # ports=None whilst port checks are disabled.
         make_assess_status_func.assert_called_once_with(
             'test-config', REQUIRED_INTERFACES, charm_func=mock.ANY,
-            services='s1', ports=None)
+            services=['mysql'], ports=None)
+        services.assert_called_once()
 
     def test_pause_unit_helper(self):
         with mock.patch.object(percona_utils, '_pause_resume_helper') as prh:

@@ -15,6 +15,11 @@ from charmhelpers.core.hookenv import (
     config,
 )
 
+from charmhelpers.core.host import (
+    CompareHostReleases,
+    lsb_release,
+)
+
 from percona_utils import (
     pause_unit_helper,
     resume_unit_helper,
@@ -61,11 +66,14 @@ def backup(args):
     if incremental:
         optionlist.append("--incremental")
 
+    # xtrabackup 2.4 (introduced in Bionic) doesn't support compact backups
+    if CompareHostReleases(lsb_release()['DISTRIB_CODENAME']) < 'bionic':
+        optionlist.append("--compact")
+
     try:
         subprocess.check_call(
-            ['innobackupex', '--compact', '--galera-info', '--rsync',
-             basedir, '--user=sstuser',
-             '--password={}'.format(sstpw)] + optionlist)
+            ['innobackupex', '--galera-info', '--rsync', basedir,
+             '--user=sstuser', '--password={}'.format(sstpw)] + optionlist)
         action_set({
             'time-completed': (strftime("%Y-%m-%d %H:%M:%S", gmtime())),
             'outcome': 'Success'}
