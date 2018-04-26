@@ -363,6 +363,52 @@ class UtilsTestsCTC(CharmTestCase):
             )
             application_version_set.assert_called_with('5.6.17')
 
+    @mock.patch.object(percona_utils, 'pxc_installed')
+    @mock.patch.object(percona_utils, 'determine_packages')
+    @mock.patch.object(percona_utils, 'application_version_set')
+    @mock.patch.object(percona_utils, 'get_upstream_version')
+    def test_assess_status_find_pkg(self, get_upstream_version,
+                                    application_version_set,
+                                    determine_packages,
+                                    pxc_installed):
+        get_upstream_version.side_effect = [None, None, '5.6.17']
+        determine_packages.return_value = ['percona-xtradb-cluster-server']
+        pxc_installed.return_value = True
+        with mock.patch.object(percona_utils, 'assess_status_func') as asf:
+            callee = mock.Mock()
+            asf.return_value = callee
+            percona_utils.assess_status('test-config')
+            asf.assert_called_once_with('test-config')
+            callee.assert_called_once_with()
+            get_upstream_version.assert_called_with(
+                'percona-xtradb-cluster-server-5.6'
+            )
+            application_version_set.assert_called_with('5.6.17')
+
+    @mock.patch.object(percona_utils, 'log')
+    @mock.patch.object(percona_utils, 'pxc_installed')
+    @mock.patch.object(percona_utils, 'determine_packages')
+    @mock.patch.object(percona_utils, 'application_version_set')
+    @mock.patch.object(percona_utils, 'get_upstream_version')
+    def test_assess_status_find_pkg_fails(self, get_upstream_version,
+                                          application_version_set,
+                                          determine_packages,
+                                          pxc_installed, log):
+        get_upstream_version.return_value = None
+        determine_packages.return_value = ['percona-xtradb-cluster-server']
+        pxc_installed.return_value = True
+        with mock.patch.object(percona_utils, 'assess_status_func') as asf:
+            callee = mock.Mock()
+            asf.return_value = callee
+            percona_utils.assess_status('test-config')
+            asf.assert_called_once_with('test-config')
+            callee.assert_called_once_with()
+            get_upstream_version.assert_called_with(
+                'percona-xtradb-cluster-server-5.7'
+            )
+            self.assertFalse(application_version_set.called)
+            self.assertTrue(log.called)
+
     @mock.patch.object(percona_utils, 'services')
     @mock.patch.object(percona_utils, 'REQUIRED_INTERFACES')
     @mock.patch.object(percona_utils, 'make_assess_status_func')

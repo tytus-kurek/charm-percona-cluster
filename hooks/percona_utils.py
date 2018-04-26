@@ -670,7 +670,25 @@ def assess_status(configs):
     """
     assess_status_func(configs)()
     if pxc_installed():
-        application_version_set(get_upstream_version(determine_packages()[0]))
+        # NOTE(fnordahl) ensure we do not call application_version_set with
+        # None argument.  New charm deployments will have the meta-package
+        # installed, but upgraded deployments will not.
+        def _possible_packages():
+            base = determine_packages()[0]
+            yield base
+            if '.' not in base:
+                for i in range(5, 7+1):
+                    yield base+'-5.'+str(i)
+        version = None
+        for pkg in _possible_packages():
+            version = get_upstream_version(pkg)
+            if version is not None:
+                break
+        else:
+            log('Unable to determine installed version for package "{}"'
+                .format(determine_packages()[0]), level=WARNING)
+            return
+        application_version_set(version)
 
 
 def assess_status_func(configs):
