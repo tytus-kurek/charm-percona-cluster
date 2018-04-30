@@ -216,7 +216,7 @@ def render_config(hosts=None):
         context['default_storage_engine'] = 'InnoDB'
         context['wsrep_log_conflicts'] = True
         context['innodb_autoinc_lock_mode'] = '2'
-        context['pxc_strict_mode'] = 'ENFORCING'
+        context['pxc_strict_mode'] = config('pxc-strict-mode')
 
     context.update(PerconaClusterHelper().parse_config())
     render(os.path.basename(config_file), config_file, context, perms=0o444)
