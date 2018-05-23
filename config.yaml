@@ -227,6 +227,16 @@ options:
       implication of this is one can set configuration values that could lead
       to memory exhaustion during run time as memory is not allocated at
       startup time.
+  pxc-strict-mode:
+    type: string
+    default: enforcing
+    description: |
+      Configures pxc_strict_mode (https://www.percona.com/doc/percona-xtradb-cluster/LATEST/features/pxc-strict-mode.html)
+      Valid values are 'disabled', 'permissive', 'enforcing' and 'master.'
+      Defaults to 'enforcing', as this is what PXC5.7 on bionic (and above)
+      does.
+      This option is ignored on PXC < 5.7 (xenial defaults to 5.6, trusty
+      defaults to 5.5)
   tuning-level:
     type: string
     default: safest
