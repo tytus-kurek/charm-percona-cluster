@@ -73,6 +73,7 @@ log_error = /var/log/mysql/error.log
 # note: if you are setting up a replication slave, see README.Debian about
 #       other settings you may need to change.
 {% if enable_binlogs -%}
+server_id = {{ server_id }}
 log_bin={{ binlogs_path }}
 {% endif %}
 

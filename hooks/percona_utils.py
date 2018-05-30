@@ -1032,3 +1032,23 @@ def get_wsrep_provider_options():
                                       .format(config('peer-timeout')))
 
     return ';'.join(wsrep_provider_options)
+
+
+def get_server_id():
+    """ Return unique server id for bin log replication
+
+    Server ID must be a unique, non-zero, positive number from 1 to 2**32 - 1
+    https://dev.mysql.com/doc/refman/8.0/en/replication-options.html
+
+    :returns: int server_id
+    """
+    MAX_SERVER_ID = 2**32 - 1
+
+    # Get the juju unit number
+    server_id = int(local_unit().split('/')[-1])
+
+    # Server ID of 0 indicates disabled replication, use the max instead
+    if server_id == 0:
+        server_id = MAX_SERVER_ID
+
+    return server_id

@@ -110,6 +110,7 @@ from percona_utils import (
     update_root_password,
     cluster_wait,
     get_wsrep_provider_options,
+    get_server_id,
 )
 
 from charmhelpers.core.unitdata import kv
@@ -191,6 +192,7 @@ def render_config(hosts=None):
         'binlogs_expire_days': config('binlogs-expire-days'),
         'performance_schema': config('performance-schema'),
         'is_leader': is_leader(),
+        'server_id': get_server_id(),
     }
 
     if config('prefer-ipv6'):
