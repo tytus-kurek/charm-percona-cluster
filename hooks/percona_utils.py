@@ -1095,3 +1095,200 @@ def set_ready_on_peers():
     """
     for relid in relation_ids('cluster'):
         relation_set(relation_id=relid, ready=True)
+
+
+def configure_master(master_password):
+    """ Configure master (lp1776171)
+
+    Calls 'create_replication_user' function for IP addresses of all related
+    units.
+
+    :param: replication password
+    :type master_password: string
+    """
+    for rid in relation_ids('master'):
+        for unit in related_units(rid):
+            if not relation_get(attribute='slave_address', rid=rid, unit=unit):
+                log("No IP address for {} yet".format(unit), level=DEBUG)
+                return False
+            else:
+                slave_addresses = list_replication_users()
+                slave_address = relation_get(attribute='slave_address',
+                                             rid=rid, unit=unit)
+                # If not yet created
+                if slave_address not in slave_addresses:
+                    create_replication_user(relation_get(
+                                            attribute='slave_address', rid=rid,
+                                            unit=unit), master_password)
+
+
+def configure_slave():
+    """ Configure slave (lp1776171)
+
+    Configures MySQL asynchronous replication slave.
+
+    :raises: OperationalError
+    """
+    rel_data = {}
+    for rid in relation_ids('slave'):
+        for unit in related_units(rid):
+            if not relation_get(attribute='leader', rid=rid, unit=unit):
+                log("No relation data for {} yet".format(unit), level=DEBUG)
+                return False
+            rdata = relation_get(unit=unit, rid=rid)
+            if rdata.get('leader') == 'yes':
+                if not (rdata.get('master_address') and
+                        rdata.get('master_file') and
+                        rdata.get('master_password') and
+                        rdata.get('master_position')):
+                    log("No full relation data for {} yet".format(unit),
+                        level=DEBUG)
+                    return False
+                m_helper = get_db_helper()
+                try:
+                    m_helper.connect(user='replication',
+                                     password=rdata.get('master_password'),
+                                     host=rdata.get('master_address'))
+                    rel_data['master_address'] = rdata.get('master_address')
+                    rel_data['master_file'] = rdata.get('master_file')
+                    rel_data['master_password'] = rdata.get('master_password')
+                    rel_data['master_position'] = rdata.get('master_position')
+                except OperationalError:
+                    log("Could not connect to {}".format(unit), level=DEBUG)
+    if not rel_data:
+        log("Unable to find the master", level=DEBUG)
+        return False
+    sql1 = "STOP SLAVE;"
+    sql2 = "CHANGE MASTER TO " + \
+           "master_host='" + rel_data['master_address'] + "', " + \
+           "master_port=3306, " + \
+           "master_user='replication', " + \
+           "master_password='" + rel_data['master_password'] + \
+           "', " + \
+           "master_log_file='" + rel_data['master_file'] + "', " + \
+           "master_log_pos=" + rel_data['master_position'] + ";"
+    sql3 = "START SLAVE;"
+    m_helper = get_db_helper()
+    try:
+        m_helper.connect(password=m_helper.get_mysql_root_password())
+    except OperationalError:
+        log("Could not connect to db", level=DEBUG)
+        return False
+    m_helper.execute(sql1)
+    m_helper.execute(sql2)
+    m_helper.execute(sql3)
+
+
+def deconfigure_slave():
+    """ Deconfigure slave (lp1776171)
+
+    Deconfigures MySQL asynchronous replication slave on relation departure.
+
+    :raises: OperationalError
+    """
+    sql1 = "STOP SLAVE;"
+    sql2 = "RESET SLAVE ALL;"
+    m_helper = get_db_helper()
+    try:
+        m_helper.connect(password=m_helper.get_mysql_root_password())
+    except OperationalError:
+        log("Could not connect to db", level=DEBUG)
+        return False
+    m_helper.execute(sql1)
+    m_helper.execute(sql2)
+
+
+def get_master_status(interface):
+    """ Get master status (lp1776171)
+
+    Returns MySQL asynchronous replication master status.
+
+    :param: relation name
+    :type interface: string
+    :returns: IP address in space associated with 'master' binding
+    :returns: replication file
+    :returns: replication file position
+    :rtype master_address: string
+    :rtype master_file: string
+    :rtype master_position: string
+    :raises: OperationalError
+    """
+    master_address = network_get_primary_address(interface)
+    m_helper = get_db_helper()
+    try:
+        m_helper.connect(password=m_helper.get_mysql_root_password())
+    except OperationalError:
+        log("Could not connect to db", level=DEBUG)
+        return False
+    sql = "SHOW MASTER STATUS;"
+    results = m_helper.select(sql)
+    master_file = results[0][0]
+    master_position = results[0][1]
+    return master_address, master_file, master_position
+
+
+def create_replication_user(slave_address, master_password):
+    """ Create replication user (lp1776171)
+
+    Grants access for MySQL asynchronous replication slave.
+
+    :param: slave IP address
+    :param: replication password
+    :type slave_address: string
+    :type master_password: string
+    :raises: OperationalError
+    """
+    m_helper = get_db_helper()
+    try:
+        m_helper.connect(password=m_helper.get_mysql_root_password())
+    except OperationalError:
+        log("Could not connect to db", level=DEBUG)
+        return False
+    sql = "GRANT REPLICATION SLAVE ON *.* TO " + \
+          "'replication'@'" + slave_address + "' " + \
+          "IDENTIFIED BY '" + master_password + "';"
+    m_helper.execute(sql)
+
+
+def delete_replication_user(slave_address):
+    """ Delete replication user (lp1776171)
+
+    Revokes access for MySQL asynchronous replication slave.
+
+    :param: slave IP address
+    :type slave_address: string
+    :raises: OperationalError
+    """
+    m_helper = get_db_helper()
+    try:
+        m_helper.connect(password=m_helper.get_mysql_root_password())
+    except OperationalError:
+        log("Could not connect to db", DEBUG)
+        return False
+    sql = "DELETE FROM mysql.user WHERE " + \
+          "Host='" + slave_address + "' AND " + \
+          "User='replication';"
+    m_helper.execute(sql)
+
+
+def list_replication_users():
+    """ List replication users (lp1776171)
+
+    Lists IP addresses of slaves which have been granted with an access for
+    MySQL asynchronous replication.
+
+    :returns: IP addresses of slaves
+    :rtype replication_users: list of strings
+    :raises: OperationalError
+    """
+    replication_users = []
+    m_helper = get_db_helper()
+    try:
+        m_helper.connect(password=m_helper.get_mysql_root_password())
+    except OperationalError:
+        log("Could not connect to db", DEBUG)
+        return False
+    sql = "SELECT Host FROM mysql.user WHERE User='replication';"
+    for result in m_helper.select(sql):
+        replication_users.append(result[0])
+    return replication_users

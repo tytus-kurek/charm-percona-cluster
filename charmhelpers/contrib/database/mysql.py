@@ -78,9 +78,11 @@ class MySQLHelper(object):
         self.delete_ondisk_passwd_file = delete_ondisk_passwd_file
         self.connection = None
 
-    def connect(self, user='root', password=None):
-        log("Opening db connection for %s@%s" % (user, self.host), level=DEBUG)
-        self.connection = MySQLdb.connect(user=user, host=self.host,
+    def connect(self, user='root', password=None, host=None):
+        if not host:
+            host=self.host
+        log("Opening db connection for %s@%s" % (user, host), level=DEBUG)
+        self.connection = MySQLdb.connect(user=user, host=host,
                                           passwd=password)
 
     def database_exists(self, db_name):
@@ -162,6 +164,24 @@ class MySQLHelper(object):
             cursor.execute(sql)
         finally:
             cursor.close()
+
+    def select(self, sql):
+        """
+        Execute arbitrary SQL select query against the database
+        and return the results.
+        :param sql: SQL select query to execute
+        :type sql: string
+        :returns: SQL select query result
+        :rtype: list of lists
+        :raises: MySQLdb.Error
+        """
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(sql)
+            results = [list(i) for i in cursor.fetchall()]
+        finally:
+            cursor.close()
+        return results
 
     def migrate_passwords_to_leader_storage(self, excludes=None):
         """Migrate any passwords storage on disk to leader storage."""

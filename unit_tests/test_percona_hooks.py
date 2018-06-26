@@ -283,6 +283,63 @@ class TestNRPERelation(CharmTestCase):
             mock.ANY, ["mysql"], mock.ANY)
 
 
+class TestMasterRelation(CharmTestCase):
+    def setUp(self):
+        patch_targets_master = TO_PATCH[:]
+        patch_targets_master.append("configure_master")
+        patch_targets_master.append("get_master_status")
+        CharmTestCase.setUp(self, hooks, patch_targets_master)
+
+    def test_relation_settings_is_leader(self):
+        self.relation_ids.return_value = ['master:1']
+        self.is_clustered.return_value = True
+        self.test_config.set('cluster-id', '1')
+        self.is_leader.return_value = True
+        self.leader_get.return_value = 'password'
+        self.configure_master.return_value = True
+        self.get_master_status.return_value = '10.0.0.1', 'file', 'position'
+
+        hooks.master_joined()
+        self.relation_set.assert_called_with(
+            relation_id='master:1', relation_settings={
+                'leader': 'yes', 'master_address': '10.0.0.1',
+                'master_file': 'file', 'master_password': 'password',
+                'master_position': 'position'})
+
+    def test_relation_settings_is_not_leader(self):
+        self.relation_ids.return_value = ['master:1']
+        self.test_config.set('vip', '10.0.0.10 192.168.0.10')
+        self.is_clustered.return_value = True
+        self.test_config.set('cluster-id', '1')
+        self.is_leader.return_value = False
+
+        hooks.master_joined()
+        self.relation_set.assert_called_with(
+            relation_id='master:1', relation_settings={
+                'leader': 'no', 'master_address': '', 'master_file': '',
+                'master_password': '', 'master_position': ''})
+
+
+class TestSlaveRelation(CharmTestCase):
+    def setUp(self):
+        patch_targets_slave = TO_PATCH[:]
+        patch_targets_slave.append("configure_slave")
+        CharmTestCase.setUp(self, hooks, patch_targets_slave)
+
+    def test_relation_settings(self):
+        self.relation_ids.return_value = ['slave:1']
+        self.is_clustered.return_value = True
+        self.test_config.set('cluster-id', '1')
+        self.is_leader.return_value = True
+        self.configure_slave.return_value = True
+        self.network_get_primary_address.return_value = '172.16.0.1'
+
+        hooks.slave_joined()
+        self.relation_set.assert_called_with(
+            relation_id='slave:1', relation_settings={
+                'slave_address': '172.16.0.1'})
+
+
 class TestConfigChanged(CharmTestCase):
 
     TO_PATCH = [

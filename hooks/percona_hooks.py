@@ -35,6 +35,7 @@ from charmhelpers.core.host import (
     file_hash,
     lsb_release,
     CompareHostReleases,
+    pwgen,
 )
 from charmhelpers.core.templating import render
 from charmhelpers.fetch import (
@@ -113,6 +114,13 @@ from percona_utils import (
     get_server_id,
     is_sufficient_peers,
     set_ready_on_peers,
+    configure_master,
+    configure_slave,
+    deconfigure_slave,
+    get_master_status,
+    create_replication_user,
+    delete_replication_user,
+    list_replication_users,
 )
 
 from charmhelpers.core.unitdata import kv
@@ -222,6 +230,25 @@ def render_config(hosts=None):
         context['innodb_autoinc_lock_mode'] = '2'
         context['pxc_strict_mode'] = config('pxc-strict-mode')
 
+    if config('databases-to-replicate'):
+        databases_to_replicate = []
+        entries = config('databases-to-replicate').split(';')
+        for entry in entries:
+            databases_and_tables = {}
+            entry_split = entry.split(':')
+            databases_and_tables['database'] = entry_split[0]
+            try:
+                databases_and_tables['tables'] = entry_split[1].split(',')
+            except IndexError:
+                databases_and_tables['tables'] = []
+            databases_to_replicate.append(databases_and_tables)
+        context['databases_to_replicate'] = databases_to_replicate
+
+    if config('cluster-id'):
+        context['server_id'] = config('cluster-id')
+    else:
+        context['server_id'] = get_server_id()
+
     context.update(PerconaClusterHelper().parse_config())
     render(os.path.basename(config_file), config_file, context, perms=0o444)
 
@@ -272,6 +299,10 @@ def render_config_restart_on_changed(hosts, bootstrap=False):
                     WARNING)
                 attempts += 1
                 cluster_wait()
+
+            # NOTE(tkurek): re-set 'master' relation data
+            if relation_ids('master'):
+                master_joined()
 
         # If we get here we assume prior actions have succeeded to always
         # this unit is marked as seeded so that subsequent calls don't result
@@ -424,6 +455,10 @@ def config_changed():
     if is_bootstrapped():
         update_root_password()
         set_ready_on_peers()
+
+    # NOTE(tkurek): re-set 'master' relation data
+    if relation_ids('master'):
+        master_joined()
 
 
 @hooks.hook('cluster-relation-joined')
@@ -802,12 +837,24 @@ def ha_relation_changed():
 def leader_settings_changed():
     '''Re-trigger install once leader has seeded passwords into install'''
     config_changed()
+    # NOTE(tkurek): re-set 'master' relation data
+    if relation_ids('master'):
+        master_joined()
+    # NOTE(tkurek): deconfigure old leader
+    if relation_ids('slave'):
+        deconfigure_slave()
 
 
 @hooks.hook('leader-elected')
 def leader_elected():
     '''Set the leader nodes IP'''
     leader_set(**{'leader-ip': get_relation_ip('cluster')})
+    # NOTE(tkurek): re-set 'master' relation data
+    if relation_ids('master'):
+        master_joined()
+    # NOTE(tkurek): configure new leader
+    if relation_ids('slave'):
+        configure_slave()
 
 
 @hooks.hook('nrpe-external-master-relation-joined',
@@ -825,6 +872,121 @@ def update_nrpe_config():
         check_cmd='check_procs -c 1:1 -C mysqld'
     )
     nrpe_setup.write()
+
+
+@hooks.hook('master-relation-joined')
+def master_joined(interface='master'):
+    relation_settings = {}
+    if not is_clustered():
+        log("Not clustered yet", level=DEBUG)
+        return
+    status_set("active", "Unit is ready")
+    if not config('cluster-id'):
+        log("Master relation requires 'cluster-id' option", level=INFO)
+        status_set("blocked", "Master relation requires 'cluster-id' option")
+        return
+    status_set("active", "Unit is ready")
+    if is_leader():
+        if not leader_get('async-rep-password'):
+            # Replication password cannot be longer than 32 characters
+            leader_set({'async-rep-password': pwgen(32)})
+            return
+        else:
+            master_password = leader_get('async-rep-password')
+            configure_master(master_password)
+            master_address, master_file, master_position = \
+                get_master_status(interface)
+            relation_settings = {'leader': 'yes',
+                                 'master_address': master_address,
+                                 'master_file': master_file,
+                                 'master_password': master_password,
+                                 'master_position': master_position}
+    else:
+        relation_settings = {'leader': 'no',
+                             'master_address': '',
+                             'master_file': '',
+                             'master_password': '',
+                             'master_position': ''}
+    log("Setting master relation: '%s'" % (relation_settings), level=INFO)
+    for rid in relation_ids(interface):
+        relation_set(relation_id=rid, relation_settings=relation_settings)
+
+
+@hooks.hook('master-relation-changed')
+def master_changed(interface='master'):
+    if is_leader():
+        new_slave_addresses = []
+        old_slave_addresses = list_replication_users()
+        for rid in relation_ids(interface):
+            for unit in related_units(rid):
+                if not relation_get(attribute='slave_address',
+                                    rid=rid, unit=unit):
+                    log("No relation data for {}".format(unit), level=DEBUG)
+                    return
+                new_slave_addresses.append(relation_get(
+                                           attribute='slave_address', rid=rid,
+                                           unit=unit))
+        for new_slave_address in new_slave_addresses:
+            if new_slave_address not in old_slave_addresses:
+                create_replication_user(new_slave_address,
+                                        leader_get('async-rep-password'))
+
+
+@hooks.hook('master-relation-departed')
+def master_departed(interface='master'):
+    if is_leader():
+        reset_password = True
+        new_slave_addresses = []
+        old_slave_addresses = list_replication_users()
+        for rid in relation_ids(interface):
+            if related_units(rid):
+                reset_password = False
+            for unit in related_units(rid):
+                if not relation_get(attribute='slave_address',
+                                    rid=rid, unit=unit):
+                    log("No relation data for {}".format(unit), level=DEBUG)
+                    return
+                new_slave_addresses.append(relation_get(
+                                           attribute='slave_address', rid=rid,
+                                           unit=unit))
+        for old_slave_address in old_slave_addresses:
+            if old_slave_address not in new_slave_addresses:
+                delete_replication_user(old_slave_address)
+        if reset_password:
+            leader_set({'async-rep-password': ''})
+
+
+@hooks.hook('slave-relation-joined')
+def slave_joined(interface='slave'):
+    relation_settings = {}
+    if not is_clustered():
+        log("Not clustered yet", level=DEBUG)
+        return
+    status_set("active", "Unit is ready")
+    if not config('cluster-id'):
+        log("Master relation requires 'cluster-id' option", level=INFO)
+        status_set("blocked", "Master relation requires 'cluster-id' option")
+        return
+    status_set("active", "Unit is ready")
+    if is_leader():
+        configure_slave()
+    relation_settings = {'slave_address':
+                         network_get_primary_address(interface)}
+    log("Setting slave relation: '%s'" % (relation_settings), level=INFO)
+    for rid in relation_ids(interface):
+        relation_set(relation_id=rid, relation_settings=relation_settings)
+
+
+@hooks.hook('slave-relation-changed')
+def slave_changed():
+    slave_departed()
+    slave_joined()
+
+
+@hooks.hook('slave-relation-departed')
+def slave_departed():
+    if is_leader():
+        deconfigure_slave()
 
 
 @hooks.hook('update-status')
